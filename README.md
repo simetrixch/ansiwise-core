@@ -7,10 +7,11 @@ being deployed — a plugin brings all of that, and a check turns the tree red i
 here.
 
 It is a library, and it used to mean two things at once: the framework, and the REST surface inside
-it. That surface is now [`ansiwise-rest`](https://github.com/simetrixch/ansiwise-rest). The only
-executable is the composition root in
-[`ansiwise-cli`](https://github.com/simetrixch/ansiwise-cli) — two binaries would mean two plugin
-lists to keep in step and a client having to know which of them a machine has.
+it. That surface lives in the composition root,
+[`ansiwise-cli`](https://github.com/simetrixch/ansiwise-cli), which produces two executables from it:
+`ansiwise`, which runs a declared program against a machine, and `ansiwise-rest`, which serves the
+REST surface over an address or over a session's own pipes. Both compose ONE plugin list, so the two
+cannot come to know different steps.
 
 
 Runs a declared program of steps against a machine, and can prove in advance what it would change.

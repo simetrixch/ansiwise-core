@@ -750,7 +750,9 @@ void main() {
     });
   });
 
-  // WHAT THE CLIENT IS TOLD ABOUT SUCH A ROW is measured where the surface that tells it lives:
-  // ansiwise-rest/test/rest/measured_values_over_the_wire_test.dart. It moved with the endpoints,
-  // because a probe of what an endpoint answers is a probe of that package and not of this one.
+  // WHAT THE CLIENT IS TOLD ABOUT SUCH A ROW is not measured here, and this comment used to name a
+  // suite that measures it — ansiwise-rest/test/rest/measured_values_over_the_wire_test.dart, which
+  // has never existed in any repository. What the endpoints answer is covered by the suites under
+  // ansiwise-cli/test/rest/, and whether a measured value reaches a caller UNDER THAT NAME is
+  // covered by none of them.
 }
