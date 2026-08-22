@@ -119,6 +119,40 @@ void main() {
       expect(found.single.kind, 'git');
     });
 
+    test('THE ONE UNFOLLOWABLE EDGE THAT IS HELD ELSEWHERE is passed over, and only that one', () {
+      // The audits this gate runs are a git dependency of this manifest, so the walk cannot open
+      // them and would report the unknown — correctly, if nobody were measuring. Somebody is: the
+      // hosted-only check in that package, over its own manifest, where it IS readable. This entry
+      // is the pointer between the two halves, and it is a NAME rather than a rule so that a second
+      // unfollowable edge is still reported.
+      final List<UnhostedEdge> found = _reach(<String, String>{
+        '': _manifest('ansiwise_api', <String, String>{
+          'ansiwise_checks_tree':
+              '\n    git:\n      url: https://forge.example.invalid/checks.git\n      path: tree',
+          'another_unreadable': '\n    git:\n      url: https://forge.example.invalid/another.git',
+        }),
+      });
+
+      expect(
+        found.map((UnhostedEdge each) => each.package),
+        <String>['another_unreadable'],
+        reason:
+            'the held edge is passed over and every other one is still reported — an exception that '
+            'widened the rule would have hidden both',
+      );
+    });
+
+    test('the held edge carries its reason and names where it is held', () {
+      // A bare name in a list is a claim with nothing behind it. What makes this pair work is that
+      // a reader arriving here is told which check, in which package, over which file.
+      expect(heldElsewhere.keys, <String>['ansiwise_checks_tree']);
+      expect(
+        heldElsewhere['ansiwise_checks_tree'],
+        allOf(contains('hosted-only'), contains('ansiwise-checks'), contains('DEV dependency')),
+        reason: 'the reason has to say what holds it and where, or the other half cannot be found',
+      );
+    });
+
     test('a dev dependency counts, because it is the same coupling in a different hat', () {
       final List<UnhostedEdge> found = _reach(<String, String>{
         '':

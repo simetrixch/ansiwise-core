@@ -126,6 +126,10 @@ List<UnhostedEdge> unhostedReachOf({
           : p.url.normalize(p.url.join(directory, declaredPath));
       final Manifests? beyond = at == null ? null : manifestsOf(at);
       if (beyond == null) {
+        if (heldElsewhere.containsKey(declared.name)) {
+          // Not followable from here, and answered where it CAN be read. See [heldElsewhere].
+          continue;
+        }
         // Not followable from here — a git dependency, or a path with nothing readable at it. What
         // it leads to is UNKNOWN, and unknown is reported rather than assumed clean.
         found.add(
@@ -228,3 +232,28 @@ _Declared _declaredAs(String name, Object? value) {
   }
   return _Declared(name: name, kind: _hosted);
 }
+
+/// The unfollowable dependencies whose answer is given where their manifest CAN be read, and where.
+///
+/// **WHY AN ALLOWLIST AND NOT A LOOSER RULE.** A git dependency cannot be followed from here: the
+/// package is not on this disk in a fresh clone, and this check will not guess. Reporting the
+/// unknown is the correct default and it stays the default. But one of ours is reached on purpose,
+/// and the honest answer is not to widen the rule until it fits — it is to say WHICH one, and where
+/// somebody can go and see that the promise is kept.
+///
+/// **THE TWO HALVES ONLY WORK TOGETHER.** The entry below asserts nothing by itself; what holds it
+/// is a check in the other package, over the other package's own manifest, which is readable from
+/// there. Each names the other. Delete either and the pair is a claim with nothing behind it, which
+/// is why the reason is written out rather than left as a bare name in a list.
+///
+/// **WHAT THIS DOES NOT MAKE SAFE.** It does not say the entry cannot lead back — it says somebody
+/// else is measuring whether it does. A reader who wants the guarantee itself goes to the named
+/// check and reads it, exactly as they would follow a path dependency from here.
+const Map<String, String> heldElsewhere = <String, String>{
+  'ansiwise_checks_tree':
+      'a DEV dependency, so nothing compiled reaches it. Whether it leads back is held by the '
+      'hosted-only check in ansiwise-checks/tree, over that package\'s own manifest: every '
+      'dependency it names has to be served by pub.dev, and a git, path or hosted block in any of '
+      'its three dependency sections turns that tree red. It is measured there because from here it '
+      'is a git dependency nothing can open',
+};
