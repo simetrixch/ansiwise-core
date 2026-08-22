@@ -56,3 +56,8 @@ version-guard: test/checks/version_guard_test.dart
 # decides whether the release page marks a pre-release. This package is compiled into nothing, so a
 # tag typed straight into git is the whole of what somebody else would then resolve, held to nothing.
 release: test/checks/release_test.dart
+# Every dependency this package resolves out of git names a release tag and never a branch. Only a
+# DEV dependency stands here, so what this keeps is not a consumer — a consumer never resolves one —
+# but the gate itself: the tree at a release tag IS the release, and a dev dependency following a
+# branch means re-running that gate later judges a tree nobody released.
+dependency-pins: test/checks/dependency_pins_test.dart
