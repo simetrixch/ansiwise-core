@@ -24,6 +24,7 @@ final class HttpRequest {
     this.body,
     this.timeout,
     this.socketPath,
+    this.acceptsAnyCertificate = false,
     bool? observes,
   }) : observes = observes ?? (method == 'GET' || method == 'HEAD' || method == 'OPTIONS');
 
@@ -51,6 +52,23 @@ final class HttpRequest {
   /// Nothing else about the request changes: [url] still parses and still supplies the request path
   /// and the `Host` header, and this only moves where the bytes go.
   final String? socketPath;
+
+  /// Whether a certificate this request cannot verify is accepted rather than ending the exchange.
+  ///
+  /// FALSE EVERYWHERE UNLESS A ROW SAYS OTHERWISE, and a row that says otherwise is saying
+  /// something narrow: that what it establishes is whether the address ANSWERS, not who is
+  /// answering. A readiness wait an installation aims at its own service is the case this exists
+  /// for, and the reason is not laziness about TLS — it is that the wait and the certificate are
+  /// produced by the same run. The route is published before its certificate is issued, so the
+  /// server on the other end serves whatever the proxy holds as its default until the issuer has
+  /// solved its challenge, and every one of those seconds is inside the window the wait exists to
+  /// cover. A verifying client fails for the whole of exactly the period it was asked to wait out,
+  /// and reports the store as unreachable while the store is running.
+  ///
+  /// It is per-request and never a setting, so it cannot be turned on for a run: a request that
+  /// gives up the check names itself in the record, and one that never asked for it cannot be
+  /// weakened by something written somewhere else.
+  final bool acceptsAnyCertificate;
 
   /// Whether this request only reads.
   ///

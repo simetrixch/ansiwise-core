@@ -24,6 +24,12 @@ final class RealHttp implements Http {
     if (timeout != null) {
       client.connectionTimeout = timeout;
     }
+    // Only when the request itself asked. The callback is what dart:io offers in place of a flag,
+    // and returning true from it accepts the certificate the check rejected — so it is installed
+    // for that one exchange and for no other, which is the whole of the guarantee the field makes.
+    if (request.acceptsAnyCertificate) {
+      client.badCertificateCallback = (X509Certificate certificate, String host, int port) => true;
+    }
     // The URL is still parsed below and still supplies the request path and the Host header; only
     // where the connection goes changes. The port number passed to startConnect is meaningless for
     // a unix socket and is not what selects it — the address's type is.
