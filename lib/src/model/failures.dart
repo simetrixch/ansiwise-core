@@ -163,7 +163,27 @@ final class RequestRefused extends EngineFailure {
     required this.url,
     required this.status,
     required this.body,
-  }) : super('$method $url answered $status');
+  }) : super(_said(method, url, status, body));
+
+  /// The sentence an operator reads, with the far side's own words IN it.
+  ///
+  /// A status names WHICH door was shut and never why. The other end has usually already answered
+  /// the question the reader is about to ask — `{"pk":["This field is required."]}` names the
+  /// defect exactly — and a message that drops it leaves them guessing at the one thing that was
+  /// known. Quoting is safe HERE and only here: the body is redacted before it reaches this
+  /// failure, which is precisely why [AnswerIncomplete] beside it carries no body at all.
+  ///
+  /// Long bodies are cut and SAY they were cut, with the full length: an HTML error page runs to
+  /// kilobytes, and a record no one will read is as good as a record that says nothing.
+  static String _said(String method, String url, int status, String body) {
+    final String said = body.trim();
+    if (said.isEmpty) return '$method $url answered $status with an empty body';
+    const int cap = 600;
+    final String shown = said.length <= cap
+        ? said
+        : '${said.substring(0, cap)}… (cut, ${said.length} characters in all)';
+    return '$method $url answered $status: $shown';
+  }
 
   /// The request method.
   final String method;
