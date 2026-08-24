@@ -65,7 +65,18 @@ final class RealHttp implements Http {
     }
     final String? body = request.body;
     if (body != null) {
-      sending.add(utf8.encode(body));
+      // THE LENGTH IS SET, AND WITHOUT IT THE BODY DOES NOT ARRIVE AT SOME SERVERS. A request whose
+      // length this client has not stated is sent with `transfer-encoding: chunked`, and a server
+      // that does not read a chunked body sees an EMPTY one — which it answers as a request missing
+      // the fields it requires, saying nothing about an encoding.
+      //
+      // Measured against one identity provider: the same address, credential and body answered 204
+      // with a length and 400 chunked. It had gone unnoticed because the other tools this platform
+      // drives do read chunked bodies, so exactly one of them failed and it looked like that tool's
+      // own refusal.
+      final List<int> bytes = utf8.encode(body);
+      sending.contentLength = bytes.length;
+      sending.add(bytes);
     }
 
     final HttpClientResponse response = await sending.close();
