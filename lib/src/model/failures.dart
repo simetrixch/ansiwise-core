@@ -35,6 +35,40 @@ final class MutationRefused extends EngineFailure {
   final StepName step;
 }
 
+/// A program row asked to keep the output of a command that answers with a secret.
+///
+/// **Raised by the recording shell, before the command starts.** That is the first moment the two
+/// halves are known together: `keep_output` is a fact of the row and is fixed before the run, while
+/// a command declares its output secret in the code of the step that builds it, and a step builds
+/// its commands while it runs. Nothing earlier in the run can see both, so nothing earlier can
+/// refuse.
+///
+/// **A dry run reaches it wherever the step issues that command from its check**, which is where a
+/// step reads what is already on the machine — and a real run is admitted only where a dry run of
+/// the same input came back green, so such a row is met before the run has changed anything. Where
+/// a step issues that command from its apply alone, nothing before the real run can meet it: the
+/// row is refused at that step, and what the run did up to there is taken back by the unwind.
+///
+/// What the command wrote is in neither this message nor the record. That it is never written down
+/// is the whole of what the declaration says.
+final class KeepOutputRefused extends EngineFailure {
+  /// Records that the row running [step] says `keep_output` while [argv] answers with a secret.
+  KeepOutputRefused({required this.step, required this.argv}) : super(_said(step, argv));
+
+  static String _said(StepName step, List<String> argv) =>
+      'the row running $step says keep_output, and "${argv.join(' ')}" answers with a secret\n'
+      'a command that says its output is secret never reaches the record, so keeping this row as it '
+      'stands would put a credential in a file every account on the machine may read — take '
+      'keep_output off the row, or run a command that does not answer with the secret';
+
+  /// The step whose command it was, which is the row that named the step.
+  final StepName step;
+
+  /// The command, as the record would have written it: the executable and its arguments, with
+  /// every registered secret already hidden.
+  final List<String> argv;
+}
+
 /// A program file does not add up.
 ///
 /// Raised by the loader before anything is looked at or touched: an unknown step name, an unknown
@@ -101,7 +135,9 @@ final class ElevationUnavailable extends EngineFailure {
 /// A command returned something other than zero.
 ///
 /// The message carries the command and what it wrote to standard error, because that pair is what
-/// an operator reads first and having to open the record to find it is one step too many.
+/// an operator reads first and having to open the record to find it is one step too many. The one
+/// command whose words it does not carry is the one that says its output is a secret, and
+/// [CommandFailed.withheldOutput] is how that is said.
 final class CommandFailed extends EngineFailure {
   /// Records that [argv] returned [exitCode].
   CommandFailed({
@@ -110,6 +146,19 @@ final class CommandFailed extends EngineFailure {
     required String stdout,
     required String stderr,
   }) : super(_format(argv, exitCode, stdout, stderr));
+
+  /// Records that [argv] returned [exitCode], with nothing of what it wrote.
+  ///
+  /// For a command whose `secretOutput` says its answer is a credential. This message reaches the
+  /// record as the row's verdict, so quoting the output here would write down exactly what the
+  /// declaration says is never written down — and saying nothing at all would leave a reader to
+  /// take a failure with no output for a command that answered with none.
+  CommandFailed.withheldOutput({required this.argv, required this.exitCode})
+    : super(
+        '${argv.join(' ')} returned $exitCode\n'
+        'what it wrote is not here: this command answers with a secret, so nothing keeps its '
+        'output',
+      );
 
   static String _format(List<String> argv, int exitCode, String stdout, String stderr) {
     final String out = _bound(stdout.trim());

@@ -94,6 +94,7 @@ final class Command {
       environment = const <String, String>{},
       observes = false,
       elevated = false,
+      secretOutput = false,
       timeout = null;
 
   /// Describes a command with everything about how it runs spelled out.
@@ -104,6 +105,7 @@ final class Command {
     this.environment = const <String, String>{},
     this.observes = false,
     this.elevated = false,
+    this.secretOutput = false,
     this.timeout,
   });
 
@@ -125,6 +127,7 @@ final class Command {
     this.executable, {
     this.arguments = const <String>[],
     this.elevated = false,
+    this.secretOutput = false,
   }) : workingDirectory = null,
        environment = const <String, String>{},
        observes = true,
@@ -176,6 +179,30 @@ final class Command {
   /// Where the password comes from is not decided here and is not knowable from a command: it is
   /// [Elevation], which the composition root reads out of the installation's own configuration.
   final bool elevated;
+
+  /// Whether what this command writes on its two output streams is a secret.
+  ///
+  /// **Said in code by whoever wrote the command, never by a program row**, for the same reason a
+  /// measured value declares it: the caller knows what it asked the machine for, and a file does
+  /// not. A command that reads a credential store whole answers with every credential in it, and
+  /// nothing in the argv says so.
+  ///
+  /// **What follows from it, in the recording shell in `lib/src/engine/recording_ports.dart`.**
+  /// That shell keeps a command's output when the command failed and when the row said
+  /// `keep_output`; for a command that says this it keeps neither, and where it would have kept the
+  /// output it leaves a line saying how many it withheld, so an answer that was not kept is not read
+  /// as an answer that was empty. A row
+  /// saying `keep_output` where such a command runs is REFUSED before the command starts, rather
+  /// than quietly given less than it asked for: it is asking for a credential in a file every
+  /// account on the machine may read, which is a defect in the program and not a preference.
+  ///
+  /// **Redaction cannot stand in for it.** What the redactor hides are the values it was told
+  /// about, in the form it was told them — a value the command answers with in another encoding is
+  /// text it has never seen, and a value nobody registered is text nothing is looking for. This
+  /// says the output is a secret without anybody having to know what is in it.
+  ///
+  /// The default is false, so a command nobody thought about is recorded as every other command is.
+  final bool secretOutput;
 }
 
 /// What a command did.

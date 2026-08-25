@@ -159,6 +159,11 @@ enum OutputStream {
 /// dropped — because for those the output is the evidence. Everything else leaves only its
 /// [CommandFinished], which still counts the lines, so an unkept answer never reads as an empty
 /// one.
+///
+/// A command that says its own output is a secret leaves none of what it wrote. Where the output
+/// would have been kept, it leaves one of these per stream instead: a line saying how many were
+/// withheld. Same shape as the dropped-lines line, and there for the same reason the count on
+/// [CommandFinished] is.
 @immutable
 final class Output extends RunEvent {
   /// Records one line a command wrote to [stream].

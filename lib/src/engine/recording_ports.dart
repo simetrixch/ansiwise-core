@@ -15,6 +15,7 @@ import '../domain/http.dart';
 import '../domain/recorder.dart';
 import '../domain/shell.dart';
 import '../domain/logger.dart';
+import '../model/failures.dart';
 import '../model/names.dart';
 import '../model/run_event.dart';
 import 'redactor.dart';
@@ -26,6 +27,13 @@ import 'redactor.dart';
 /// evidence somebody will need to read. Everything else is noise the record would grow by, so it
 /// leaves only the [CommandFinished] with its exit code, its elapsed time, and a count of the lines
 /// that were not kept — the count, so an unkept answer can never be read as an empty one.
+///
+/// **One command overrides both of those: the one whose `secretOutput` says its answer is a
+/// credential.** Its lines are never kept, whatever the row asked and whatever it returned, because
+/// the record is a file every account on the machine may read. A row that asks for them anyway is
+/// refused with [KeepOutputRefused] before the command starts — the alternative, honouring
+/// `keep_output` for every command except that one, is a record that keeps less than the program
+/// says while nothing says so.
 final class RecordingShell implements Shell {
   /// Wraps [inner] so that every command reaches [recorder], attributed to [step].
   const RecordingShell(
@@ -63,6 +71,13 @@ final class RecordingShell implements Shell {
 
   @override
   Future<CommandResult> run(Command command) async {
+    if (command.secretOutput && keepsOutput) {
+      // BEFORE the command is recorded as started and before it is run, which is the order the
+      // planning ports keep for the same reason: what was refused did not happen, and a record
+      // saying it was attempted would say otherwise.
+      throw KeepOutputRefused(step: step, argv: redactor.hideAll(command.argv));
+    }
+
     recorder.record(
       (int sequence, DateTime at) => CommandStarted(
         sequence: sequence,
@@ -77,8 +92,8 @@ final class RecordingShell implements Shell {
     final CommandResult result = await inner.run(command);
 
     if (!result.ok || keepsOutput) {
-      _recordLines(result.stdout, OutputStream.stdout);
-      _recordLines(result.stderr, OutputStream.stderr);
+      _recordLines(result.stdout, OutputStream.stdout, secret: command.secretOutput);
+      _recordLines(result.stderr, OutputStream.stderr, secret: command.secretOutput);
     }
 
     recorder.record(
@@ -97,8 +112,20 @@ final class RecordingShell implements Shell {
 
   int _lineCount(String text) => text.isEmpty ? 0 : LineSplitter.split(text).length;
 
-  void _recordLines(String text, OutputStream stream) {
+  void _recordLines(String text, OutputStream stream, {required bool secret}) {
     if (text.isEmpty) {
+      return;
+    }
+    if (secret) {
+      // How many, and not one of them. This is reached where the output WOULD have been kept, which
+      // for such a command is only a command that failed — and a failed command whose lines are
+      // simply absent reads as a command that wrote nothing, which is the reading this line exists
+      // to prevent.
+      final int lines = LineSplitter.split(text).length;
+      _recordLine(
+        stream,
+        '[withheld ${lines == 1 ? '1 line' : '$lines lines'}: this command answers with a secret]',
+      );
       return;
     }
     // Split rather than record the block whole: the record is read line by line, and a client that

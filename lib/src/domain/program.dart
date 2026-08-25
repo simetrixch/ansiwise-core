@@ -192,7 +192,12 @@ final class ProgramStep {
   /// judgement about one installation belongs.
   ///
   /// What is kept is bounded and redacted exactly as a failed command's output is — the tail, with
-  /// a line saying how much was dropped — so saying yes here cannot make the record unreadable and
-  /// cannot let a secret through.
+  /// a line saying how much was dropped — so saying yes here cannot make the record unreadable.
+  ///
+  /// **What redaction removes is the values the run registered, in the form it was given them**, so
+  /// a command that answers with a credential in any other form is not covered by it. Such a command
+  /// says so where it is written, in code; a row that says this while one of them runs is REFUSED
+  /// when it reaches the shell, rather than being given a record with less in it than the row asked
+  /// for and nothing saying why.
   final bool keepsOutput;
 }

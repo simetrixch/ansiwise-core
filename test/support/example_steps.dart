@@ -34,18 +34,25 @@ final class WritesAFile extends ReversibleStep<String?> with FileStep {
 /// A step that runs a command it declares as changing something, and whose postcondition is a file
 /// the command is supposed to leave behind.
 final class RunsACommand extends IrreversibleStep with CommandStep {
-  RunsACommand({required this.argv, required this.leaves});
+  RunsACommand({required this.argv, required this.leaves, this.secretOutput = false});
 
   final List<String> argv;
 
   /// The file the command is supposed to produce, which is what proves it worked.
   final String leaves;
 
+  /// Whether the command says its answer is a credential.
+  ///
+  /// A value and not a second class: what differs between a step that reads a secret store whole
+  /// and one that runs a release tool is this flag on the command, and nothing else.
+  final bool secretOutput;
+
   @override
   String get irreversibleReason => 'the command it runs does not come with a way back';
 
   @override
-  Command commandFor(StepContext context) => Command(argv.first, argv.sublist(1));
+  Command commandFor(StepContext context) =>
+      Command.detailed(argv.first, arguments: argv.sublist(1), secretOutput: secretOutput);
 
   @override
   Future<CheckResult> check(StepContext context) async => await context.files.exists(leaves)

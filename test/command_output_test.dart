@@ -22,6 +22,19 @@ void main() {
     keepsOutput: keepsOutput,
   );
 
+  /// The context one step runs in, for the two tests that ask a step and not a port.
+  StepContext contextOn(Harness h) => StepContext(
+    shell: h.shell,
+    files: h.files,
+    http: h.http,
+    clock: h.clock,
+    entropy: h.entropy,
+    log: RecordingLogger(recorder: h.recorder, redactor: h.redactor, step: const StepName('runs')),
+    step: const StepName('runs'),
+    arguments: Arguments.none,
+    facts: Facts.none,
+  );
+
   group('what a command leaves in the record', () {
     test('a failed command keeps its output without being asked', () async {
       final Harness h = Harness();
@@ -186,6 +199,242 @@ void main() {
       expect(record.exitCode, 0, reason: 'both commands succeeded — that is the point');
       expect(h.recorder.output, <String>['release placed: everything it installed listed here']);
       expect(h.recorder.forStep(const StepName('noisy')).whereType<Output>(), isEmpty);
+    });
+  });
+
+  group('a command whose output must never be kept', () {
+    // The shape this exists for: a command that reads a credential store whole answers with every
+    // credential in it, in whatever form that store keeps them. It is not text the redactor was
+    // told about, so nothing is looking for it.
+    const String heldSecret = 'cGFzc3dvcmQtb2YtZXZlcnl0aGluZw==';
+
+    Command readsTheStore() =>
+        const Command.observing('tool', arguments: <String>['read'], secretOutput: true);
+
+    test('a command that failed keeps none of what it wrote', () async {
+      final Harness h = Harness();
+      h.shell.answer(
+        'tool read',
+        const CommandResult(
+          exitCode: 1,
+          stdout: 'field: $heldSecret\nfield2: $heldSecret',
+          stderr: 'Error: the store answered halfway',
+          elapsed: Duration.zero,
+        ),
+      );
+
+      await recording(h).run(readsTheStore());
+
+      expect(
+        jsonEncode(<Object?>[
+          for (final RunEvent e in h.recorder.events) const RecordCodec().event(e),
+        ]),
+        isNot(contains(heldSecret)),
+        reason: 'a failed command is the one case output is kept without anybody asking',
+      );
+    });
+
+    test(
+      'THE INNOCENT NEIGHBOUR: the same failure without the declaration keeps its output',
+      () async {
+        final Harness h = Harness();
+        h.shell.answer(
+          'tool read',
+          const CommandResult(
+            exitCode: 1,
+            stdout: 'field: $heldSecret',
+            stderr: 'Error: the store answered halfway',
+            elapsed: Duration.zero,
+          ),
+        );
+
+        await recording(h).run(const Command.observing('tool', arguments: <String>['read']));
+
+        expect(h.recorder.output, <String>[
+          'field: $heldSecret',
+          'Error: the store answered halfway',
+        ]);
+      },
+    );
+
+    test('the record says how many lines were withheld, and still counts them', () async {
+      final Harness h = Harness();
+      h.shell.answer(
+        'tool read',
+        const CommandResult(
+          exitCode: 1,
+          stdout: 'field: $heldSecret\nfield2: $heldSecret',
+          stderr: 'Error: the store answered halfway',
+          elapsed: Duration.zero,
+        ),
+      );
+
+      await recording(h).run(readsTheStore());
+
+      expect(h.recorder.output, <String>[
+        '[withheld 2 lines: this command answers with a secret]',
+        '[withheld 1 line: this command answers with a secret]',
+      ], reason: 'without this, a failed command with no output reads as one that said nothing');
+      final CommandFinished finished = h.recorder.only<CommandFinished>().single;
+      expect(finished.stdoutLines, 2);
+      expect(finished.stderrLines, 1);
+    });
+
+    test('a row that says keep_output where such a command runs is REFUSED, naming the '
+        'step and the flag', () async {
+      final Harness h = Harness();
+      h.shell.answers('tool read', 'field: $heldSecret');
+
+      expect(
+        () => recording(h, keepsOutput: true).run(readsTheStore()),
+        throwsA(
+          isA<KeepOutputRefused>()
+              .having((KeepOutputRefused f) => f.step, 'step', const StepName('runs'))
+              .having((KeepOutputRefused f) => f.message, 'message', contains('keep_output'))
+              .having((KeepOutputRefused f) => f.message, 'message', contains('tool read')),
+        ),
+      );
+    });
+
+    test('the refusal comes before the command runs and before anything is recorded', () async {
+      final Harness h = Harness();
+      h.shell.answers('tool read', 'field: $heldSecret');
+
+      await expectLater(
+        () => recording(h, keepsOutput: true).run(readsTheStore()),
+        throwsA(isA<KeepOutputRefused>()),
+      );
+
+      expect(h.shell.ran, isEmpty, reason: 'what was refused did not happen');
+      expect(
+        h.recorder.events,
+        isEmpty,
+        reason: 'and a record saying it was started would say that it did',
+      );
+    });
+
+    test('a failure of such a command reports its exit code and none of its answer', () async {
+      final Harness h = Harness();
+      h.shell.answer(
+        'tool read',
+        const CommandResult(
+          exitCode: 2,
+          stdout: 'field: $heldSecret',
+          stderr: 'Error: $heldSecret came back malformed',
+          elapsed: Duration.zero,
+        ),
+      );
+      final RunsACommand step = RunsACommand(
+        argv: <String>['tool', 'read'],
+        leaves: '/never-written',
+        secretOutput: true,
+      );
+
+      await expectLater(
+        () => step.apply(contextOn(h)),
+        throwsA(
+          isA<CommandFailed>()
+              .having((CommandFailed f) => f.exitCode, 'exitCode', 2)
+              .having((CommandFailed f) => f.message, 'message', isNot(contains(heldSecret)))
+              .having((CommandFailed f) => f.message, 'message', contains('tool read returned 2')),
+        ),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: an ordinary command still fails with what it wrote', () async {
+      final Harness h = Harness();
+      h.shell.answer(
+        'tool read',
+        const CommandResult(
+          exitCode: 2,
+          stdout: '',
+          stderr: 'Error: the store is not there',
+          elapsed: Duration.zero,
+        ),
+      );
+      final RunsACommand step = RunsACommand(
+        argv: <String>['tool', 'read'],
+        leaves: '/never-written',
+      );
+
+      await expectLater(
+        () => step.apply(contextOn(h)),
+        throwsA(
+          isA<CommandFailed>().having(
+            (CommandFailed f) => f.message,
+            'message',
+            contains('the store is not there'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('the two rows of one program, side by side', () {
+    // The counter-probe of the whole mechanism, as a program rather than as a port: one row asks to
+    // keep the output of a command that answers with a secret and is refused; the row beside it asks
+    // the same thing of an ordinary command and gets it.
+    const String heldSecret = 'cGFzc3dvcmQtb2YtZXZlcnl0aGluZw==';
+
+    test('the row running a secret answer is refused, and the ordinary row still keeps its '
+        'output', () async {
+      final Harness h = Harness();
+      h.shell.answers('tool release', 'release placed: everything it installed listed here');
+      h.shell.changes('tool release', () => h.files.contents['/release-made'] = '');
+      h.shell.answers('tool read', 'field: $heldSecret');
+
+      final ResolvedProgram program =
+          ProgramResolver(
+            registryOf(
+              steps: <String, (String, Step Function(Arguments))>{
+                'evidence': (
+                  'x:1',
+                  (Arguments a) =>
+                      RunsACommand(argv: <String>['tool', 'release'], leaves: '/release-made'),
+                ),
+                'reads_the_store': (
+                  'x:2',
+                  (Arguments a) => RunsACommand(
+                    argv: <String>['tool', 'read'],
+                    leaves: '/never-written',
+                    secretOutput: true,
+                  ),
+                ),
+              },
+            ),
+          ).resolve(
+            programOf(
+              'p',
+              <(String, OnFailure, List<String>)>[
+                ('evidence', OnFailure.exit, <String>[]),
+                ('reads_the_store', OnFailure.exit, <String>[]),
+              ],
+              keepOutput: <String>{'evidence', 'reads_the_store'},
+            ),
+          );
+
+      final RunRecord record = await h.runner.run(
+        program: program,
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(record.exitCode, isNot(0));
+      final StepRecord refused = record.steps.last;
+      expect(refused.step, const StepName('reads_the_store'));
+      final Failed verdict = refused.verdict as Failed;
+      expect(verdict.reason, contains('reads_the_store'));
+      expect(verdict.reason, contains('keep_output'));
+      expect(
+        h.recorder.output,
+        contains('release placed: everything it installed listed here'),
+        reason: 'a row that asks for an ordinary command\'s answer still gets it',
+      );
+      expect(
+        '${jsonEncode(<Object?>[for (final RunEvent e in h.recorder.events) const RecordCodec().event(e)])}'
+        '${jsonEncode(const RecordCodec().run(record))}',
+        isNot(contains(heldSecret)),
+      );
     });
   });
 

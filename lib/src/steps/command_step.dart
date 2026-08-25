@@ -27,13 +27,19 @@ base mixin CommandStep on Step {
   Future<void> apply(StepContext context) async {
     final Command command = commandFor(context);
     final CommandResult result = await context.shell.run(command);
-    if (!result.ok) {
-      throw CommandFailed(
-        argv: command.argv,
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-      );
+    if (result.ok) {
+      return;
     }
+    // The verdict is written into the record, so the command that says its output is a secret is
+    // reported by its exit code alone. Quoting it here would put in the record through the verdict
+    // exactly what the recording shell one call down refused to put there as output.
+    throw command.secretOutput
+        ? CommandFailed.withheldOutput(argv: command.argv, exitCode: result.exitCode)
+        : CommandFailed(
+            argv: command.argv,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          );
   }
 }
