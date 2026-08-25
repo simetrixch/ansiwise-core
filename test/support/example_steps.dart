@@ -144,6 +144,75 @@ final class Blocks extends IrreversibleStep {
   Future<void> apply(StepContext context) async {}
 }
 
+/// A gate that reads the machine with a command that has to run as root.
+///
+/// The shape of every check whose subject belongs to root: the READING itself needs the privilege,
+/// so on a machine that holds no way to raise a command the step learns nothing at all — the shell
+/// refuses before a process starts and the check never reaches the machine it was asked about.
+final class MeasuresAsRoot extends ObservingStep {
+  /// Looks for the one path this example is about.
+  const MeasuresAsRoot();
+
+  /// What it looks for, in a place only root may see.
+  static const String path = '/var/lib/example';
+
+  /// The command it looks with, written down once so a fake shell can be told to answer it.
+  static const Command looks = Command.detailed(
+    'test',
+    arguments: <String>['-e', path],
+    observes: true,
+    elevated: true,
+  );
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    final CommandResult answered = await context.shell.run(looks);
+    return answered.ok
+        ? const CheckResult.satisfied('$path is there')
+        : const CheckResult.blocked('$path is not there');
+  }
+}
+
+/// A step that writes where only root may look, and whose plan says what stands there now.
+///
+/// The shape of every step that writes: what it WOULD change is described out of what is there, so
+/// the reading its plan rests on needs the same privilege the write does. Its check answers before
+/// anything is read, which is what puts the refusal in the plan rather than in the check.
+final class PlansAsRoot extends IrreversibleStep {
+  /// Would put [content] where only root may write.
+  const PlansAsRoot({required this.content});
+
+  /// What it would put there.
+  final String content;
+
+  /// The file it writes, in a place only root may read.
+  static const String path = '/var/lib/example';
+
+  /// The command its plan reads with, written down once so a fake shell can be told to answer it.
+  static const Command reads = Command.detailed(
+    'cat',
+    arguments: <String>[path],
+    observes: true,
+    elevated: true,
+  );
+
+  @override
+  String get irreversibleReason => 'what stood in $path is kept nowhere';
+
+  @override
+  Future<CheckResult> check(StepContext context) async => const CheckResult.ready();
+
+  @override
+  Future<StepPlan> plan(StepContext context) async {
+    final CommandResult found = await context.shell.run(reads);
+    return StepPlan.diff(path, before: found.trimmed, after: content);
+  }
+
+  @override
+  Future<void> apply(StepContext context) async =>
+      context.files.write(path, content, mode: 0x1a4, elevated: true);
+}
+
 /// A condition that answers whatever it was built with.
 final class Says implements Predicate {
   const Says({required this.answer, required this.because});

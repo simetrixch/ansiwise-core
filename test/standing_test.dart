@@ -14,6 +14,10 @@ import 'support/harness.dart';
 /// THREE STATES, and the point is that they never mix. Proven is what the framework measured;
 /// declared is what something claimed and nothing verified; skipped did not run. **Skipped is not
 /// passed**, and a waived gate is not a proof.
+///
+/// AND PROVEN IS ABOUT THIS RUN'S ROW, not about the kind of step that produced it. The shape of a
+/// step says whether a row of it can ever be proven; whether the reading came back says whether
+/// this one was. A row whose check could not be taken at all is declared, however ordinary the step.
 void main() {
   /// A registry holding one of each kind of row this file is about.
   Registry registry() => registryOf(
@@ -21,6 +25,8 @@ void main() {
       'measures': ('x:1', (Arguments a) => const Measures('the machine is as it should be')),
       'verifies': ('x:2', (Arguments a) => const VerifiesWhatRanBefore()),
       'waits': ('x:3', (Arguments a) => WaitsOnTheRowsWord(command: a.text('command'))),
+      'measures_as_root': ('x:4', (Arguments a) => const MeasuresAsRoot()),
+      'plans_as_root': ('x:5', (Arguments a) => const PlansAsRoot(content: 'the new text')),
     },
     predicates: <String, Predicate>{
       'never': const Says(answer: false, because: 'this machine is not that kind'),
@@ -40,6 +46,25 @@ void main() {
     List<(String, OnFailure, List<String>)> entries, {
     Map<String, Arguments> arguments = const <String, Arguments>{},
   }) => ProgramResolver(registry()).resolve(programOf('p', entries, arguments: arguments));
+
+  /// A runner on a machine that can raise nothing to root, which is what an installation naming no
+  /// elevation password is.
+  ///
+  /// THE REAL SHELL AND NOT A FAKE ONE, because the refusal is the thing under test: it is raised
+  /// INSTEAD of starting the process, so nothing on the machine this suite runs on is reached and
+  /// what the check meets is the same object a real run meets. Everything else stays the harness's
+  /// fakes.
+  Runner cannotElevate(Harness h) => Runner(
+    machine: Machine(
+      shell: const RealShell(elevation: Elevation.unconfigured()),
+      files: h.files,
+      http: h.http,
+      clock: h.clock,
+      entropy: h.entropy,
+    ),
+    recorder: h.recorder,
+    redactor: h.redactor,
+  );
 
   group('a row the framework measured', () {
     test('is proven', () async {
@@ -191,6 +216,118 @@ void main() {
       );
 
       expect(record.steps.single.standing, StepStanding.proven);
+    });
+  });
+
+  group('a row whose check could not be taken at all', () {
+    /// The one row, run on the machine each test names.
+    List<(String, OnFailure, List<String>)> readsAsRoot(OnFailure onFailure) =>
+        <(String, OnFailure, List<String>)>[('measures_as_root', onFailure, <String>[])];
+
+    test('is declared, and not proven', () async {
+      // Its check looks for a path only root may see, on an installation that names no elevation
+      // password: the shell refuses before a process starts, so the check never reached the machine
+      // it was asked about. The step is an ordinary measuring one — nothing about its SHAPE says it
+      // cannot be proven — and the shape was all the engine consulted.
+      final Harness h = Harness();
+      final RunRecord record = await cannotElevate(
+        h,
+      ).run(program: resolve(readsAsRoot(OnFailure.exit)), mode: Mode.run, header: h.header());
+
+      expect(record.steps.single.verdict, isA<Failed>());
+      expect(record.steps.single.standing, StepStanding.declared);
+      expect(record.fullyProven, isFalse);
+    });
+
+    test('is counted apart from the measured rows in the line an operator reads first', () async {
+      // THE LINE AND NOT ONLY THE ROW. Two such rows, both carrying the run past their own failure,
+      // closed "2 proven, 0 declared, 0 skipped" — and that line is the one that travels into a
+      // report saying the install went through.
+      final Harness h = Harness();
+      final RunRecord record = await cannotElevate(h).run(
+        program: resolve(<(String, OnFailure, List<String>)>[
+          ('measures_as_root', OnFailure.continueRun, <String>[]),
+          ('measures_as_root', OnFailure.continueRun, <String>[]),
+        ]),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(record.exitCode, 2);
+      expect(record.standings, const Standings(declared: 2));
+      expect(
+        h.recorder.events.whereType<RunFinished>().single.standings,
+        record.standings,
+        reason: 'the number somebody tailing the run sees is the number the record keeps',
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a check that ANSWERS blocked stays proven', () async {
+      // The same step and the same command, on a machine that let the reading be taken. It came
+      // back no, the row failed, and the framework watched that happen — which is a measurement.
+      // Anything that stamped every blocked row declared would pass the two tests above and fail
+      // this one.
+      final Harness h = Harness()..shell.fails(MeasuresAsRoot.looks.argv.join(' '));
+      final RunRecord record = await h.runner.run(
+        program: resolve(readsAsRoot(OnFailure.exit)),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(record.steps.single.verdict, isA<Failed>());
+      expect(record.steps.single.standing, StepStanding.proven);
+    });
+
+    test('THE SECOND INNOCENT NEIGHBOUR: a check that answers satisfied stays proven', () async {
+      final Harness h = Harness();
+      final RunRecord record = await h.runner.run(
+        program: resolve(readsAsRoot(OnFailure.exit)),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(record.steps.single.verdict, isA<Succeeded>());
+      expect(record.standings, const Standings(proven: 1));
+      expect(record.fullyProven, isTrue);
+    });
+  });
+
+  group('a row whose plan could not be composed', () {
+    /// The one row, planned on the machine each test names.
+    final List<(String, OnFailure, List<String>)> writesAsRoot =
+        <(String, OnFailure, List<String>)>[('plans_as_root', OnFailure.exit, <String>[])];
+
+    test('is declared, and not proven', () async {
+      // The other place a reading is taken. This step's check answers without touching anything;
+      // what needs root is the plan, which describes the change out of what stands in the file now.
+      // In a dry run the plan IS the reading the row is judged by, and there is none.
+      final Harness h = Harness();
+      final RunRecord record = await cannotElevate(h).run(
+        program: resolve(writesAsRoot),
+        mode: Mode.dry,
+        header: h.header(mode: Mode.dry),
+      );
+
+      expect(record.steps.single.verdict, isA<Failed>());
+      expect(record.steps.single.standing, StepStanding.declared);
+      expect(record.fullyProven, isFalse);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: the same row where the reading comes back is proven', () async {
+      final Harness h = Harness();
+      final RunRecord record = await h.runner.run(
+        program: resolve(writesAsRoot),
+        mode: Mode.dry,
+        header: h.header(mode: Mode.dry),
+      );
+
+      expect(record.steps.single.verdict, isA<Succeeded>());
+      expect(record.steps.single.standing, StepStanding.proven);
+      expect(
+        record.steps.single.plan,
+        isNotNull,
+        reason: 'the plan is what a dry run measured, so a proven row has to hold one',
+      );
     });
   });
 

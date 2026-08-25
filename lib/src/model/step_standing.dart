@@ -15,14 +15,20 @@ enum StepStanding {
   /// In a test that is the step's own check answering; in a dry run it is the plan the step
   /// produced with the planning ports in place, so every mutation it reached for on the way to the
   /// answer was refused; in a real run it is the postcondition holding after the apply.
+  ///
+  /// **The reading has to have been taken on THIS run.** A step of a shape that can be proven is
+  /// not a proven row; a step of that shape whose reading came back is. A check that threw before
+  /// it reached the machine took no reading, whatever kind the step is.
   proven,
 
   /// Something here was taken on trust, because it could not be measured.
   ///
-  /// The case this exists for: a step whose whole job is verifying an earlier step, asked in a mode
-  /// where that earlier step has not run. Its check cannot hold and its plan is what it says it
-  /// would do rather than what anything confirmed. Reporting that as proven would put the weight of
-  /// a measurement behind a claim.
+  /// TWO CASES REACH IT. A step whose whole job is verifying an earlier step, asked in a mode where
+  /// that earlier step has not run: its check cannot hold and its plan is what it says it would do
+  /// rather than what anything confirmed. And a row whose check could not be taken at all — the
+  /// tool it measures with is missing, or the reading needs a privilege this run does not hold — so
+  /// the row failed holding nothing about the machine it was asked about. Reporting either as
+  /// proven would put the weight of a measurement behind a claim.
   declared,
 
   /// The step did not run, so there is nothing here to have measured.

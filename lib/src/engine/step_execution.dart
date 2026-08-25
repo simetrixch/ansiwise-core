@@ -162,9 +162,11 @@ final class StepExecution {
       return _finish(
         resolved: resolved,
         verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-        // A failure the framework watched happen is a measurement. What is proven here is not that
-        // the step worked — the verdict says it did not — but that the row says what was seen.
-        standing: _measured(step, resolved),
+        // NOTHING THAT REACHES HERE COMPLETED ITS READING. An apply that throws is caught lower
+        // down, beside the capture its undo needs, so what arrives here is the plan, the capture or
+        // the postcondition throwing — and each of those IS the reading the row would have been
+        // judged by. The row failed and says why; what the machine holds now went unread.
+        standing: _standing(step, resolved, measured: false),
         start: start,
         firstEvent: firstEvent,
       );
@@ -298,12 +300,21 @@ final class StepExecution {
   ///
   /// Found on a real machine and findable nowhere else: a fake shell answers an argv without the
   /// executable needing to exist, so a suite is green over a program that stops at its fourth step.
-  Future<CheckResult> _checked(Step step, StepContext context) async {
+  ///
+  /// **WHETHER THE STEP ANSWERED COMES BACK BESIDE THE ANSWER.** Blocked says two different things —
+  /// the step read the machine and found a precondition missing, or the step could not read the
+  /// machine at all — and only the first is a measurement. A [CheckResult] cannot tell them apart,
+  /// and the refusal message is not the place to carry the difference: a caller that had to read a
+  /// sentence to know what it was holding would be reading it again the day it was reworded.
+  Future<({CheckResult result, bool measured})> _checked(Step step, StepContext context) async {
     try {
-      return await step.check(context);
+      return (result: await step.check(context), measured: true);
     } on Object catch (why) {
-      return CheckResult.blocked(
-        'this could not be measured: ${'$why'.split('\n').map((String l) => l.trim()).join(' ')}',
+      return (
+        result: CheckResult.blocked(
+          'this could not be measured: ${'$why'.split('\n').map((String l) => l.trim()).join(' ')}',
+        ),
+        measured: false,
       );
     }
   }
@@ -317,9 +328,9 @@ final class StepExecution {
     required DateTime start,
     required int firstEvent,
   }) async {
-    final CheckResult before = await _checked(step, context);
+    final ({CheckResult result, bool measured}) before = await _checked(step, context);
 
-    switch (before) {
+    switch (before.result) {
       case Blocked(:final String reason):
         // A step resting on an earlier one cannot proceed in either of the two modes that change
         // nothing, because the step it rests on has not run. It reports what it WOULD do instead of
@@ -361,8 +372,11 @@ final class StepExecution {
         return _finish(
           resolved: resolved,
           verdict: _verdictFor(resolved.entry.onFailure, reason),
-          // The check answered, and what it answered was that a precondition does not hold.
-          standing: _measured(step, resolved),
+          // TWO ROWS END HERE AND THEY ARE NOT THE SAME ROW. One read the machine and found a
+          // precondition missing, which is a measurement and the answer this branch was written
+          // for. The other never read anything: its check threw and the engine turned the throw
+          // into this refusal, so the row failed without a single fact about the machine behind it.
+          standing: _standing(step, resolved, measured: before.measured),
           start: start,
           firstEvent: firstEvent,
         );
@@ -380,7 +394,7 @@ final class StepExecution {
               'an exchange answered that its work already stands, and nothing on the other end can '
               'say that: what it publishes is the whole of what the request does. It said: $because',
             ),
-            standing: _measured(step, resolved),
+            standing: _standing(step, resolved, measured: true),
             start: start,
             firstEvent: firstEvent,
           );
@@ -394,7 +408,7 @@ final class StepExecution {
           verdict: const Succeeded(),
           // The check read the machine and found it already in the state this step produces. That
           // is a measurement, and it is the one idempotence rests on.
-          standing: _measured(step, resolved),
+          standing: _standing(step, resolved, measured: true),
           start: start,
           firstEvent: firstEvent,
           plan: mode == Mode.dry ? StepPlan.nothing(because) : null,
@@ -430,7 +444,7 @@ final class StepExecution {
           resolved: resolved,
           verdict: const Succeeded(),
           // The step's own check answered on this machine. That is everything a test claims.
-          standing: _measured(step, resolved),
+          standing: _standing(step, resolved, measured: true),
           start: start,
           firstEvent: firstEvent,
         );
@@ -444,7 +458,7 @@ final class StepExecution {
           // The framework asked while the precondition held, with the planning ports around every
           // way out of this step — so whatever it reached for on the way to this answer was refused
           // rather than carried out. That is what makes the plan a measurement and not a claim.
-          standing: _measured(step, resolved),
+          standing: _standing(step, resolved, measured: true),
           start: start,
           firstEvent: firstEvent,
           plan: plan,
@@ -470,7 +484,10 @@ final class StepExecution {
           return _finish(
             resolved: resolved,
             verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-            standing: _measured(step, resolved),
+            // The check answered before this and the framework watched the work throw. Both are
+            // readings of this machine, which is what puts an apply that throws on the measured
+            // side and a check that throws on the other one.
+            standing: _standing(step, resolved, measured: true),
             start: start,
             firstEvent: firstEvent,
             applied: _applied(resolved, step, context, captured),
@@ -501,7 +518,7 @@ final class StepExecution {
             verdict: _verdictFor(resolved.entry.onFailure, why),
             // The postcondition was read after the apply and did not hold. Measured, and the answer
             // was no.
-            standing: _measured(step, resolved),
+            standing: _standing(step, resolved, measured: true),
             start: start,
             firstEvent: firstEvent,
             applied: _applied(resolved, step, context, captured),
@@ -512,7 +529,7 @@ final class StepExecution {
           verdict: const Succeeded(),
           // The postcondition was read after the apply and holds. This is the only thing in the
           // framework that turns "the step returned without throwing" into "the step worked".
-          standing: _measured(step, resolved),
+          standing: _standing(step, resolved, measured: true),
           start: start,
           firstEvent: firstEvent,
           applied: _applied(resolved, step, context, captured),
@@ -554,7 +571,7 @@ final class StepExecution {
           'this row is an exchange and its step publishes nothing, so there is no postcondition to '
           'hold — the request was sent and nothing here can say what it did',
         ),
-        standing: _measured(step, resolved),
+        standing: _standing(step, resolved, measured: true),
         start: start,
         firstEvent: firstEvent,
         applied: _applied(resolved, step, context, captured),
@@ -568,7 +585,7 @@ final class StepExecution {
       return _finish(
         resolved: resolved,
         verdict: _verdictFor(resolved.entry.onFailure, _publishedNothingSaid(missing)),
-        standing: _measured(step, resolved),
+        standing: _standing(step, resolved, measured: true),
         start: start,
         firstEvent: firstEvent,
         applied: _applied(resolved, step, context, captured),
@@ -580,14 +597,34 @@ final class StepExecution {
     return _finish(
       resolved: resolved,
       verdict: const Succeeded(),
-      standing: _measured(step, resolved),
+      standing: _standing(step, resolved, measured: true),
       start: start,
       firstEvent: firstEvent,
       applied: _applied(resolved, step, context, captured),
     );
   }
 
-  /// What a branch that measured through [step] may claim.
+  /// What a branch may claim about [step], given whether it [measured] anything.
+  ///
+  /// TWO FACTS DECIDE THIS AND BOTH ARE ASKED. The SHAPE of the step says whether a row of it can
+  /// ever be proven; [measured] says whether THIS run's row was. Asked of the shape alone, a row
+  /// whose check threw before it could read anything came out proven: the reading was refused, the
+  /// row failed, and the closing line counted it among the measured ones.
+  ///
+  /// [measured] IS ABOUT THE MACHINE THE ROW SPEAKS OF, never about the framework's own attempt. A
+  /// check that threw was watched throwing, and that is a fact about the instrument — what the row
+  /// is asked for is what was there, what the step did and what is there now, and a row whose check
+  /// could not be taken holds none of it. An apply that threw is the other case and stays measured:
+  /// its check answered first, and the framework watched the work fail.
+  ///
+  /// A ROW THAT MEASURED NOTHING IS DECLARED, and not a standing of its own. Declared already means
+  /// nothing here was measured, and the branch one over stamps it for exactly this fact — a step
+  /// that rests on an earlier one is asked before that step has run, its check cannot be taken, and
+  /// the row is declared. Counting one fact under two names would leave an operator adding two
+  /// numbers to learn how much of the run nothing looked at. Skipped would be worse than wrong: it
+  /// says the program's condition left the row out, and this row was not left out — it was reached
+  /// and could not be read. Whether it FAILED is the verdict's answer and stays there, where a
+  /// second copy of it cannot disagree with the first.
   ///
   /// A step that answers on trust cannot yield a proven row, whichever way its check, its plan or
   /// its verdict came out: everything measured here was measured through something only the program
@@ -604,8 +641,8 @@ final class StepExecution {
   /// answer never changes with the mode or the branch: nothing re-read the other end, because a
   /// second look would be a second exchange. The framework watched the row work and cannot say what
   /// the work left behind, so declared is what every branch of an exchange stamps.
-  StepStanding _measured(Step step, ResolvedStep resolved) =>
-      step is ExchangeStep || step.answersOnTrust || resolved.takesAMeasurement
+  StepStanding _standing(Step step, ResolvedStep resolved, {required bool measured}) =>
+      !measured || step is ExchangeStep || step.answersOnTrust || resolved.takesAMeasurement
       ? StepStanding.declared
       : StepStanding.proven;
 
