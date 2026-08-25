@@ -464,13 +464,14 @@ final class NeedsItsValueToBeBuilt extends ObservingStep {
   Future<CheckResult> check(StepContext context) async => CheckResult.satisfied(content);
 }
 
-/// A step that changes something and THEN throws, which is the partial apply an undo exists for.
+/// A step that changes something and whose APPLY then throws, which is the partial apply an undo
+/// exists for.
 ///
 /// The shape every real one has: it does several things and the second fails. `patch_container_
 /// arguments_and_ports` in this platform's plugin patches a workload declaration and then replaces
 /// the pods, and a delete that returns non-zero throws with the declaration already changed.
-final class ChangesThenThrows extends ReversibleStep<String?> with FileStep {
-  ChangesThenThrows({required this.path});
+final class ChangesThenItsApplyThrows extends ReversibleStep<String?> with FileStep {
+  ChangesThenItsApplyThrows({required this.path});
 
   final String path;
 
@@ -496,6 +497,139 @@ final class ChangesThenThrows extends ReversibleStep<String?> with FileStep {
       stderr: 'the second act failed',
     );
   }
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async => captured == null
+      ? context.files.delete(path)
+      : context.files.write(path, captured, mode: mode);
+}
+
+/// A step that changes something and whose POSTCONDITION then throws.
+///
+/// The one place a throw meets a machine that has already been changed. The apply returned without
+/// a word, so the write stands; the reading a real run judges the row by is the one that could not
+/// be taken.
+///
+/// The shape a real one has: what a step writes with and what reads it back are not the same tool,
+/// so a write that went through says nothing about whether the reading after it will. A unit file
+/// written and `systemctl show` refusing to answer about it; a configuration written and the parser
+/// that reads it back throwing on what stands there. This one stands in for both by throwing
+/// outright once the file is there.
+///
+/// Its check answers [Ready] before the apply, because the file is not there yet. That is what puts
+/// the throw in the postcondition alone, and it is why this step is not simply one whose check
+/// always throws: such a step never applies, and the machine is never changed.
+final class ChangesThenItsPostconditionThrows extends ReversibleStep<String?> with FileStep {
+  ChangesThenItsPostconditionThrows({required this.path, this.throwsAnError = false});
+
+  final String path;
+
+  /// Whether its postcondition throws an [Error] rather than an [Exception].
+  ///
+  /// A value and not a second class of step. The row ends in the same place either way: an
+  /// [Exception] where the machine refused to answer, an [Error] where the step's own code has a
+  /// bug in it — a cast, an index, a null — and in both the write is already done and the reading
+  /// never came back. What differs is which of the engine's catches the throw would meet, and that
+  /// is the difference this value is here to hold still.
+  final bool throwsAnError;
+
+  @override
+  String pathFor(StepContext context) => path;
+
+  @override
+  int get mode => 0x1a4;
+
+  @override
+  Future<FileContent> contentFor(StepContext context) async => const FileContent.text('written');
+
+  @override
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    if (!await context.files.exists(path)) {
+      return const CheckResult.ready();
+    }
+    if (throwsAnError) {
+      throw StateError('the postcondition read a value that was not there');
+    }
+    throw CommandFailed(
+      argv: <String>['read-back', path],
+      exitCode: 1,
+      stdout: '',
+      stderr: 'the tool that reads $path back did not answer',
+    );
+  }
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async => captured == null
+      ? context.files.delete(path)
+      : context.files.write(path, captured, mode: mode);
+}
+
+/// A step that writes, and whose postcondition answers that the machine is still not in the state
+/// it produces.
+///
+/// The neighbour of a row whose postcondition threw, and the difference is the whole of what a
+/// standing says: this reading came back and the answer was no, which is a measurement. It is
+/// reversible and writes through the file port, so what it did can be taken back and a test can
+/// read off the machine whether it was.
+final class WritesButNeverSatisfied extends ReversibleStep<String?> with FileStep {
+  WritesButNeverSatisfied({required this.path});
+
+  final String path;
+
+  @override
+  String pathFor(StepContext context) => path;
+
+  @override
+  int get mode => 0x1a4;
+
+  @override
+  Future<FileContent> contentFor(StepContext context) async => const FileContent.text('written');
+
+  @override
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<CheckResult> check(StepContext context) async => const CheckResult.ready();
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async => captured == null
+      ? context.files.delete(path)
+      : context.files.write(path, captured, mode: mode);
+}
+
+/// A step whose capture throws, so nothing of it ever reached the machine.
+///
+/// The innocent neighbour of a row that threw after its apply. [ReversibleStep.capture] runs BEFORE
+/// the apply — it is the reading an undo is built out of — so a row that threw there wrote nothing,
+/// and an unwind reaching it would change a machine this run never touched: this undo puts back
+/// what the capture returned, and the capture returned nothing.
+///
+/// The shape a real one has: the file it is about to overwrite belongs to root, and the reading is
+/// refused before the step gets as far as writing.
+final class ThrowsWhileCapturing extends ReversibleStep<String?> with FileStep {
+  ThrowsWhileCapturing({required this.path});
+
+  final String path;
+
+  @override
+  String pathFor(StepContext context) => path;
+
+  @override
+  int get mode => 0x1a4;
+
+  @override
+  Future<FileContent> contentFor(StepContext context) async => const FileContent.text('written');
+
+  @override
+  Future<String?> capture(StepContext context) async => throw CommandFailed(
+    argv: <String>['cat', path],
+    exitCode: 1,
+    stdout: '',
+    stderr: 'what stands in $path cannot be read, so nothing here could put it back',
+  );
 
   @override
   Future<void> undo(StepContext context, String? captured) async => captured == null

@@ -124,7 +124,7 @@ void main() {
         ProgramResolver(
           registryOf(
             steps: <String, (String, Step Function(Arguments))>{
-              'half': ('x:1', (Arguments a) => ChangesThenThrows(path: '/half')),
+              'half': ('x:1', (Arguments a) => ChangesThenItsApplyThrows(path: '/half')),
             },
           ),
         ).resolve(
@@ -138,6 +138,187 @@ void main() {
       h.files.contents.containsKey('/half'),
       isFalse,
       reason: 'and the throw did not stop it being taken back',
+    );
+  });
+
+  group('a step whose POSTCONDITION threw', () {
+    // THE ONE THROW THAT MEETS AN ALREADY-CHANGED MACHINE. The reading a real run judges a row by is
+    // taken AFTER the apply, so the write stands by the time it can throw; every other place a step
+    // can throw is before the write or is the write. It used to be read outside the branch that
+    // keeps what an undo needs, so the throw left the step's own code entirely, the answer that came
+    // back carried no applied step, and the unwind never reached the one row whose reading could not
+    // confirm what it had done — while its kind went on telling the operator it could be taken back.
+
+    ResolvedProgram writesThenCannotReadItBack(OnFailure onFailure, {bool throwsAnError = false}) =>
+        ProgramResolver(
+          registryOf(
+            steps: <String, (String, Step Function(Arguments))>{
+              'half': (
+                'x:1',
+                (Arguments a) =>
+                    ChangesThenItsPostconditionThrows(path: '/half', throwsAnError: throwsAnError),
+              ),
+              'fails': ('x:2', (Arguments a) => const Blocks('the disk went away')),
+            },
+          ),
+        ).resolve(
+          programOf('p', <(String, OnFailure, List<String>)>[
+            ('half', onFailure, <String>[]),
+            ('fails', OnFailure.exit, <String>[]),
+          ]),
+        );
+
+    test('is taken back, and the machine is clean after the run', () async {
+      // The ticket's own scenario: the row writes, its postcondition throws, the program carries the
+      // run past it, and a later row ends the run. What is asserted is the state of the machine
+      // afterwards and not a list the engine keeps.
+      final Harness h = Harness();
+      await h.runner.run(
+        program: writesThenCannotReadItBack(OnFailure.continueRun),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(h.files.written, contains('/half'), reason: 'the apply really did change something');
+      expect(h.files.deleted, contains('/half'));
+      expect(h.files.contents, isEmpty, reason: 'nothing this run wrote is still on the machine');
+    });
+
+    test('is taken back where its own row ends the run as well', () async {
+      // The same row under the other failure policy, so the unwind is triggered by this row rather
+      // than by a later one. A fix that only reached the row the walk carried on past would leave
+      // the more common case standing.
+      final Harness h = Harness();
+      await h.runner.run(
+        program: writesThenCannotReadItBack(OnFailure.exit),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(h.files.written, contains('/half'));
+      expect(h.files.contents, isEmpty);
+    });
+
+    test('is taken back where the reading threw an Error and not an Exception', () async {
+      // THE OTHER HALF OF WHAT A READING THAT DID NOT COME BACK CAN BE, and the more expensive one.
+      // An Error out of a step's own code — a cast, an index, a null — passed every catch in the
+      // engine and was caught by the runner's last one, which closes a record holding NO rows at
+      // all: the write stood, the unwind never ran, and the record an operator would have read it
+      // out of had nothing in it.
+      final Harness h = Harness();
+      final RunRecord closed = await h.runner.run(
+        program: writesThenCannotReadItBack(OnFailure.continueRun, throwsAnError: true),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(h.files.written, contains('/half'));
+      expect(h.files.contents, isEmpty);
+      expect(closed.steps, hasLength(2), reason: 'and the record still holds both rows');
+    });
+
+    test('is named among the rows still standing where the unwind was turned off', () async {
+      // The other half of the same list. What an unwind takes back and what a run with the unwind
+      // switched off REPORTS as left on the machine are read from the same applied steps, so a row
+      // missing from it was invisible on both surfaces at once: the change stayed, and the record
+      // an operator reads to find out what is still there did not name it.
+      final Harness h = Harness();
+      final RunRecord closed =
+          await Runner(
+            machine: h.machine,
+            recorder: h.recorder,
+            redactor: h.redactor,
+            unwindDisabledBy: 'the --no-unwind option',
+          ).run(
+            program: writesThenCannotReadItBack(OnFailure.continueRun),
+            mode: Mode.run,
+            header: h.header(),
+          );
+
+      expect(h.files.contents.keys, contains('/half'), reason: 'nothing was taken back');
+      expect(closed.leftStanding, <String>['half']);
+    });
+
+    test('fails, and is counted apart from the measured rows', () async {
+      // What the row says about itself does not change: the reading a real run judges it by never
+      // came back, so it is declared, and the run carried on past a failure rather than a success.
+      final Harness h = Harness();
+      final RunRecord record = await h.runner.run(
+        program: writesThenCannotReadItBack(OnFailure.continueRun),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(record.steps.first.verdict, isA<Failed>());
+      expect(record.steps.first.standing, StepStanding.declared);
+      expect(record.fullyProven, isFalse);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a row whose CAPTURE threw is not taken back', () async {
+      // Capture runs before the apply, so this row wrote nothing at all. Taking it back would put
+      // the machine into a state nobody produced — this undo deletes a file the run found already
+      // there. Anything that answered the rows above by handing every throw an applied step would
+      // pass every one of them and delete /kept.
+      final Harness h = Harness(files: FakeFiles(<String, String>{'/kept': 'was here'}));
+      final ResolvedProgram program =
+          ProgramResolver(
+            registryOf(
+              steps: <String, (String, Step Function(Arguments))>{
+                'never': ('x:1', (Arguments a) => ThrowsWhileCapturing(path: '/kept')),
+                'fails': ('x:2', (Arguments a) => const Blocks('the disk went away')),
+              },
+            ),
+          ).resolve(
+            programOf('p', <(String, OnFailure, List<String>)>[
+              ('never', OnFailure.continueRun, <String>[]),
+              ('fails', OnFailure.exit, <String>[]),
+            ]),
+          );
+
+      await h.runner.run(program: program, mode: Mode.run, header: h.header());
+
+      expect(h.files.written, isEmpty, reason: 'the row threw before it wrote anything');
+      expect(h.files.deleted, isEmpty);
+      expect(h.files.contents['/kept'], 'was here');
+    });
+
+    test(
+      'THE SECOND INNOCENT NEIGHBOUR: a postcondition that was read is taken back too',
+      () async {
+        // The ordinary failing row: the postcondition answered, and the answer was that the machine
+        // is not in the state the step produces. It was already taken back before this change and
+        // still is, so a fix that moved the applied step from one branch to another rather than
+        // adding it to one cannot pass here.
+        final Harness h = Harness();
+        final ResolvedProgram program =
+            ProgramResolver(
+              registryOf(
+                steps: <String, (String, Step Function(Arguments))>{
+                  'unproven': ('x:1', (Arguments a) => WritesButNeverSatisfied(path: '/unproven')),
+                  'fails': ('x:2', (Arguments a) => const Blocks('the disk went away')),
+                },
+              ),
+            ).resolve(
+              programOf('p', <(String, OnFailure, List<String>)>[
+                ('unproven', OnFailure.continueRun, <String>[]),
+                ('fails', OnFailure.exit, <String>[]),
+              ]),
+            );
+
+        final RunRecord record = await h.runner.run(
+          program: program,
+          mode: Mode.run,
+          header: h.header(),
+        );
+
+        expect(h.files.written, contains('/unproven'));
+        expect(h.files.contents, isEmpty);
+        expect(
+          record.steps.first.standing,
+          StepStanding.proven,
+          reason: 'the postcondition was read and the answer was no, which is a measurement',
+        );
+      },
     );
   });
 

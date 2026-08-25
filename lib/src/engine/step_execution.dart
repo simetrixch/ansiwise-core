@@ -162,12 +162,15 @@ final class StepExecution {
       return _finish(
         resolved: resolved,
         verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-        // NOTHING THAT REACHES HERE LEFT A READING BEHIND. An apply that throws is caught lower
-        // down, beside the capture its undo needs, so what arrives here is the plan, the capture or
-        // the postcondition throwing. The plan IS what a dry run judges a row by and the
-        // postcondition IS what a real run judges one by, so neither came back. The capture is
-        // something else — the undo snapshot taken BEFORE the apply — and a row that threw there
-        // never reached its apply, let alone the postcondition after it.
+        // NOTHING THAT REACHES HERE CHANGED THE MACHINE, WHICH IS WHY IT CARRIES NO APPLIED STEP.
+        // Everything from the apply onwards is caught lower down, beside the capture an undo needs:
+        // the apply itself, and the postcondition read after it. What arrives here is the plan or
+        // the capture throwing, and both run before anything is written — the capture IS the undo
+        // snapshot taken before the apply.
+        //
+        // NOR DID ANYTHING LEAVE A READING BEHIND. The plan IS what a dry run judges a row by, so a
+        // row that threw composing it has none; a row that threw capturing never reached its apply,
+        // let alone the postcondition a real run judges it by.
         standing: _standing(step, resolved, measured: false),
         start: start,
         firstEvent: firstEvent,
@@ -299,6 +302,13 @@ final class StepExecution {
   /// **It is caught here and in no step**, because every step has this problem and a fix repeated
   /// fifty times is fifty chances to get it wrong. What is NOT caught here is a failure of the work
   /// itself — this wraps the check alone.
+  ///
+  /// **BOTH TIMES THE CHECK IS ASKED COME THROUGH HERE**, the one before the apply and the
+  /// postcondition after it, because they are one method and a throw out of either is the step
+  /// failing to answer. The second is where it costs most: it is the only reading taken after the
+  /// machine has been changed, so a throw there used to leave this branch entirely and the row was
+  /// closed by the catch at the top of [execute] — which carries no applied step, so a row that had
+  /// written was never unwound.
   ///
   /// Found on a real machine and findable nowhere else: a fake shell answers an argv without the
   /// executable needing to exist, so a suite is green over a program that stops at its fourth step.
@@ -514,9 +524,16 @@ final class StepExecution {
           );
         }
 
-        final CheckResult after = await step.check(context);
-        if (after is! Satisfied) {
-          final String why = switch (after) {
+        // READ THE SAME WAY THE CHECK BEFORE THE APPLY IS, and that is the whole of it. It is the
+        // same method, and a throw out of it is the step failing to ANSWER rather than the work
+        // failing — so it becomes a refusal here instead of leaving this branch. Read directly, the
+        // throw went to the catch at the top of execute(), which answers with no applied step: the
+        // unwind then never reached the one row that had written and could not confirm what it
+        // wrote, and its kind went on telling the operator it could be taken back. This is the only
+        // place a throw meets a machine this run has already changed.
+        final ({CheckResult result, bool measured}) after = await _checked(step, context);
+        if (after.result is! Satisfied) {
+          final String why = switch (after.result) {
             Blocked(:final String reason) => reason,
             Ready() => 'the step ran and the machine is still not in the state it produces',
             Satisfied() => '',
@@ -524,9 +541,11 @@ final class StepExecution {
           return _finish(
             resolved: resolved,
             verdict: _verdictFor(resolved.entry.onFailure, why),
-            // The postcondition was read after the apply and did not hold. Measured, and the answer
-            // was no.
-            standing: _standing(step, resolved, measured: true),
+            // TWO ROWS END HERE AND THEY ARE NOT THE SAME ROW, the same way they are not at the
+            // check before the apply. One read the machine after the work and found it not in the
+            // state this step produces, which is a measurement and the answer this branch was
+            // written for. The other never read anything, because the reading itself threw.
+            standing: _standing(step, resolved, measured: after.measured),
             start: start,
             firstEvent: firstEvent,
             applied: _applied(resolved, step, context, captured),
