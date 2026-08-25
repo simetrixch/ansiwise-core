@@ -162,15 +162,21 @@ final class StepExecution {
       return _finish(
         resolved: resolved,
         verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-        // NOTHING THAT REACHES HERE CHANGED THE MACHINE, WHICH IS WHY IT CARRIES NO APPLIED STEP.
-        // Everything from the apply onwards is caught lower down, beside the capture an undo needs:
-        // the apply itself, and the postcondition read after it. What arrives here is the plan or
-        // the capture throwing, and both run before anything is written — the capture IS the undo
-        // snapshot taken before the apply.
+        // NO APPLIED STEP, BECAUSE WHAT ARRIVES HERE BY THE ORDINARY PATHS CHANGED NOTHING. The
+        // plan and the capture both run before anything is written — the capture IS the undo
+        // snapshot taken before the apply — and an apply or a postcondition that throws an
+        // EXCEPTION is caught lower down, beside that snapshot, which is what an undo needs.
         //
-        // NOR DID ANYTHING LEAVE A READING BEHIND. The plan IS what a dry run judges a row by, so a
-        // row that threw composing it has none; a row that threw capturing never reached its apply,
-        // let alone the postcondition a real run judges it by.
+        // TWO THROWS ARE OUTSIDE THAT SENTENCE, and each leaves a written change standing. An
+        // ERROR rather than an Exception out of the apply passes the catch at :492, which is
+        // `on Exception` as this one is, and reaches Runner.run's `on Object` (runner.dart:157)
+        // that closes the record with no rows at all. And a recorder refusing a line inside
+        // _finish hands a row whose apply HAS written to THIS catch, because every _finish call
+        // sits inside the try opened above. Both are ansiwise-core#66.
+        //
+        // NOR DID A ROW ARRIVING BY THOSE ORDINARY PATHS LEAVE A READING BEHIND. The plan IS what
+        // a dry run judges a row by, so a row that threw composing it has none; a row that threw
+        // capturing never reached its apply, let alone the postcondition a real run judges it by.
         standing: _standing(step, resolved, measured: false),
         start: start,
         firstEvent: firstEvent,

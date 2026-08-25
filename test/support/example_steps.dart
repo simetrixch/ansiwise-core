@@ -470,6 +470,14 @@ final class NeedsItsValueToBeBuilt extends ObservingStep {
 /// The shape every real one has: it does several things and the second fails. `patch_container_
 /// arguments_and_ports` in this platform's plugin patches a workload declaration and then replaces
 /// the pods, and a delete that returns non-zero throws with the declaration already changed.
+///
+/// IT THROWS AN [Exception], AND IT HAS NO [Error] TWIN, which is the one way it differs from
+/// [ChangesThenItsPostconditionThrows] beside the call site. That twin holds the Exception/Error
+/// axis still because both ends of it end in the same place. Here they do not: the catch that
+/// takes this throw is `on Exception` (step_execution.dart:492), so an [Error] out of an apply
+/// passes it, passes the outer catch as well, and leaves the write standing with no row in the
+/// record. A step for that case would drive ansiwise-core#66 rather than this contract,
+/// and it is named here so the missing twin is a statement instead of a silence.
 final class ChangesThenItsApplyThrows extends ReversibleStep<String?> with FileStep {
   ChangesThenItsApplyThrows({required this.path});
 
