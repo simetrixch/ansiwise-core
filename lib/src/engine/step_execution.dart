@@ -162,10 +162,12 @@ final class StepExecution {
       return _finish(
         resolved: resolved,
         verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-        // NOTHING THAT REACHES HERE COMPLETED ITS READING. An apply that throws is caught lower
+        // NOTHING THAT REACHES HERE LEFT A READING BEHIND. An apply that throws is caught lower
         // down, beside the capture its undo needs, so what arrives here is the plan, the capture or
-        // the postcondition throwing — and each of those IS the reading the row would have been
-        // judged by. The row failed and says why; what the machine holds now went unread.
+        // the postcondition throwing. The plan IS what a dry run judges a row by and the
+        // postcondition IS what a real run judges one by, so neither came back. The capture is
+        // something else — the undo snapshot taken BEFORE the apply — and a row that threw there
+        // never reached its apply, let alone the postcondition after it.
         standing: _standing(step, resolved, measured: false),
         start: start,
         firstEvent: firstEvent,
@@ -302,10 +304,13 @@ final class StepExecution {
   /// executable needing to exist, so a suite is green over a program that stops at its fourth step.
   ///
   /// **WHETHER THE STEP ANSWERED COMES BACK BESIDE THE ANSWER.** Blocked says two different things —
-  /// the step read the machine and found a precondition missing, or the step could not read the
-  /// machine at all — and only the first is a measurement. A [CheckResult] cannot tell them apart,
-  /// and the refusal message is not the place to carry the difference: a caller that had to read a
-  /// sentence to know what it was holding would be reading it again the day it was reworded.
+  /// the step answered that a precondition is missing, or the step never answered and the engine
+  /// wrote this refusal in its place — and only the first is a reading. That is the question, and
+  /// not whether the check touched the machine: one that read a file and then threw on what stood
+  /// in it produced no [CheckResult] either, so there is nothing for the row to be judged by. A
+  /// [CheckResult] cannot tell the two apart, and the refusal message is not the place to carry the
+  /// difference: a caller that had to read a sentence to know what it was holding would be reading
+  /// it again the day it was reworded.
   Future<({CheckResult result, bool measured})> _checked(Step step, StepContext context) async {
     try {
       return (result: await step.check(context), measured: true);
@@ -484,10 +489,13 @@ final class StepExecution {
           return _finish(
             resolved: resolved,
             verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-            // The check answered before this and the framework watched the work throw. Both are
-            // readings of this machine, which is what puts an apply that throws on the measured
-            // side and a check that throws on the other one.
-            standing: _standing(step, resolved, measured: true),
+            // WHAT A REAL RUN IS JUDGED BY IS THE POSTCONDITION, and this row never reached it. The
+            // check said there was work to do, the work stopped, and nothing has read what the
+            // machine holds now — which is the whole of what a row that applied claims. Why it
+            // stopped is the verdict's answer and stays there, because the command that ran and
+            // came back non-zero and the shell that refused to raise it to root are the same row
+            // here: neither of them left a reading behind.
+            standing: _standing(step, resolved, measured: false),
             start: start,
             firstEvent: firstEvent,
             applied: _applied(resolved, step, context, captured),
@@ -608,14 +616,26 @@ final class StepExecution {
   ///
   /// TWO FACTS DECIDE THIS AND BOTH ARE ASKED. The SHAPE of the step says whether a row of it can
   /// ever be proven; [measured] says whether THIS run's row was. Asked of the shape alone, a row
-  /// whose check threw before it could read anything came out proven: the reading was refused, the
-  /// row failed, and the closing line counted it among the measured ones.
+  /// whose reading never came back came out proven all the same — the check refused before a
+  /// process started, or the work stopped and nothing read what the machine holds now — and the
+  /// closing line counted such rows among the measured ones.
   ///
-  /// [measured] IS ABOUT THE MACHINE THE ROW SPEAKS OF, never about the framework's own attempt. A
-  /// check that threw was watched throwing, and that is a fact about the instrument — what the row
-  /// is asked for is what was there, what the step did and what is there now, and a row whose check
-  /// could not be taken holds none of it. An apply that threw is the other case and stays measured:
-  /// its check answered first, and the framework watched the work fail.
+  /// [measured] IS ONE QUESTION AND EVERY BRANCH ASKS THE SAME ONE: did the reading this row is
+  /// judged by come back? Which reading that is, the branch above says, and it follows the mode —
+  /// a test is judged by the step's own check, a dry run by the plan composed with the planning
+  /// ports in place, a real run by the postcondition read after the apply. A row that never got
+  /// past its check is judged by that check instead, because it claims nothing beyond what the
+  /// check answered. It is never decided by WHICH catch block caught a throw: a check that threw
+  /// and a postcondition that threw are both unmeasured for the one reason that no reading came
+  /// back, and not because two different catch blocks saw them.
+  ///
+  /// WHAT THIS DOES NOT ASK is whether anything reached the machine, and the gap is deliberate. A
+  /// command that ran and answered with an exit code that is not zero and a shell that refused to
+  /// raise that command to root before a process started end the row in the same place — the
+  /// postcondition was never read — so both are unmeasured. The difference between them is real,
+  /// and it is in the verdict, in the words the failure came with. A second copy of it here would
+  /// give an operator two fields about one row that can disagree, and this is the field that must
+  /// never claim more than the run holds.
   ///
   /// A ROW THAT MEASURED NOTHING IS DECLARED, and not a standing of its own. Declared already means
   /// nothing here was measured, and the branch one over stamps it for exactly this fact — a step

@@ -34,7 +34,12 @@ final class WritesAFile extends ReversibleStep<String?> with FileStep {
 /// A step that runs a command it declares as changing something, and whose postcondition is a file
 /// the command is supposed to leave behind.
 final class RunsACommand extends IrreversibleStep with CommandStep {
-  RunsACommand({required this.argv, required this.leaves, this.secretOutput = false});
+  RunsACommand({
+    required this.argv,
+    required this.leaves,
+    this.secretOutput = false,
+    this.elevated = false,
+  });
 
   final List<String> argv;
 
@@ -47,12 +52,23 @@ final class RunsACommand extends IrreversibleStep with CommandStep {
   /// and one that runs a release tool is this flag on the command, and nothing else.
   final bool secretOutput;
 
+  /// Whether the command has to run as root.
+  ///
+  /// A value for the same reason [secretOutput] is one. It puts the privilege in the WORK rather
+  /// than in the reading before it: this step's check asks the file system and needs nothing, so a
+  /// machine that can raise nothing to root refuses in the apply, with the check already answered.
+  final bool elevated;
+
   @override
   String get irreversibleReason => 'the command it runs does not come with a way back';
 
   @override
-  Command commandFor(StepContext context) =>
-      Command.detailed(argv.first, arguments: argv.sublist(1), secretOutput: secretOutput);
+  Command commandFor(StepContext context) => Command.detailed(
+    argv.first,
+    arguments: argv.sublist(1),
+    secretOutput: secretOutput,
+    elevated: elevated,
+  );
 
   @override
   Future<CheckResult> check(StepContext context) async => await context.files.exists(leaves)
