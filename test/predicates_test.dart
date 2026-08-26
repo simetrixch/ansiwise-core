@@ -167,7 +167,10 @@ void main() {
       // end and no exit code. Every reader of records then showed a run still going while the
       // process was gone — for ever, since nothing was left to correct it.
       //
-      // What was thrown becomes the run's single issue, so handling it loses nothing.
+      // A throw out of a step is the ROW's failure, whatever its Dart type, so what was thrown is
+      // read where an operator looks for it: the last row of the record. It used to be the run's
+      // single issue over a record holding no rows at all, because a StateError is not an Exception
+      // and every catch in the engine but one asked for an Exception.
       final Harness h = Harness();
       final ResolvedProgram program =
           ProgramResolver(
@@ -190,7 +193,10 @@ void main() {
 
       expect(record.end, isNotNull);
       expect(record.exitCode, isNot(0));
-      expect(record.issues.single, contains('the machine did not come back'));
+      expect(
+        (record.steps.single.verdict as Failed).reason,
+        contains('the machine did not come back'),
+      );
     });
 
     test('THE INNOCENT NEIGHBOUR: a condition that CAN answer still closes normally', () async {

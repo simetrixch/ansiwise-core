@@ -90,7 +90,11 @@ final class Unwind {
       try {
         await step.undo(_contextFor(entry, facts, answers), entry.captured);
         log.info('taken back');
-      } on Exception catch (failure) {
+      } on Object catch (failure) {
+        // EVERYTHING AN UNDO CAN THROW, and not only what implements Exception. An Error out of a
+        // step's own undo — a cast, an index, a null — left this loop entirely and reached the
+        // catch in [Runner.run], which closes a record holding no rows: one undo with a bug in it
+        // stopped every remaining step being taken back and took the record with it.
         log.warn('could not be taken back: $failure');
       }
     }

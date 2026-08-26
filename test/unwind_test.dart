@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:ansiwise_core/ansiwise_core.dart';
 import 'package:ansiwise_core/testing.dart';
 import 'package:test/test.dart';
@@ -113,32 +115,254 @@ void main() {
     });
   });
 
-  test('a step whose apply THREW is taken back, which is where it matters most', () async {
+  group('a step whose apply THREW', () {
     // The contract on Step.undo says it must tolerate being called after a partial apply, "and that
     // is exactly when it matters". It used to be the one path where it was never called: an apply
     // that threw left the step's own branch entirely, and the answer that came back carried no
     // applied step — so the unwind never reached it, the capture was discarded, and what the step
     // changed before it threw stood while its kind still said it could be taken back.
-    final Harness h = Harness();
-    final ResolvedProgram program =
+
+    ResolvedProgram writesThenStops({bool throwsAnError = false}) =>
         ProgramResolver(
           registryOf(
             steps: <String, (String, Step Function(Arguments))>{
-              'half': ('x:1', (Arguments a) => ChangesThenItsApplyThrows(path: '/half')),
+              'half': (
+                'x:1',
+                (Arguments a) =>
+                    ChangesThenItsApplyThrows(path: '/half', throwsAnError: throwsAnError),
+              ),
             },
           ),
         ).resolve(
           programOf('p', <(String, OnFailure, List<String>)>[('half', OnFailure.exit, <String>[])]),
         );
 
-    await h.runner.run(program: program, mode: Mode.run, header: h.header());
+    test('is taken back, which is where it matters most', () async {
+      final Harness h = Harness();
+      await h.runner.run(program: writesThenStops(), mode: Mode.run, header: h.header());
 
-    expect(h.files.written, contains('/half'), reason: 'the apply really did change something');
-    expect(
-      h.files.contents.containsKey('/half'),
-      isFalse,
-      reason: 'and the throw did not stop it being taken back',
-    );
+      expect(h.files.written, contains('/half'), reason: 'the apply really did change something');
+      expect(
+        h.files.contents.containsKey('/half'),
+        isFalse,
+        reason: 'and the throw did not stop it being taken back',
+      );
+    });
+
+    test('is taken back where the apply threw an Error and not an Exception', () async {
+      // The catch beside the apply asked for an Exception, so a StateError, a cast, an index or a
+      // null out of a plugin's own apply passed it, passed the catch at the top of the step as
+      // well, and was caught by the runner's last one — which closes a record holding NO rows at
+      // all. The write stood, the unwind never ran, and the record an operator would read it out
+      // of said nothing about the step that had changed the machine.
+      final Harness h = Harness();
+      final RunRecord closed = await h.runner.run(
+        program: writesThenStops(throwsAnError: true),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(h.files.written, contains('/half'));
+      expect(h.files.contents, isEmpty);
+      expect(closed.steps, hasLength(1), reason: 'and the record still holds the row');
+      expect((closed.steps.single.verdict as Failed).reason, contains('the second act read'));
+    });
+  });
+
+  group('a throw the engine could not classify', () {
+    // ONE QUESTION AT THREE CALL SITES, and the engine used to hold two answers to it. The check
+    // either side of the apply answered Object; the catch beside the apply and the catch at the top
+    // of the step both answered Exception, so which record an operator got depended on which of
+    // them a throw happened to meet.
+
+    test('an Error out of a CAPTURE closes the row, and takes nothing back', () async {
+      // Both halves at once. The capture runs before the apply — it is the reading an undo is built
+      // out of — so this row wrote nothing, and taking it back would delete a file the run found
+      // already there. What used to happen is neither: the Error left the engine and the record
+      // closed holding no rows about the row that refused.
+      final Harness h = Harness(files: FakeFiles(<String, String>{'/kept': 'was here'}));
+      final ResolvedProgram program =
+          ProgramResolver(
+            registryOf(
+              steps: <String, (String, Step Function(Arguments))>{
+                'never': (
+                  'x:1',
+                  (Arguments a) => ThrowsWhileCapturing(path: '/kept', throwsAnError: true),
+                ),
+              },
+            ),
+          ).resolve(
+            programOf('p', <(String, OnFailure, List<String>)>[
+              ('never', OnFailure.exit, <String>[]),
+            ]),
+          );
+
+      final RunRecord closed = await h.runner.run(
+        program: program,
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(closed.steps, hasLength(1));
+      expect(closed.steps.single.verdict, isA<Failed>());
+      expect(h.files.written, isEmpty, reason: 'the row threw before it wrote anything');
+      expect(h.files.deleted, isEmpty);
+      expect(h.files.contents['/kept'], 'was here');
+    });
+
+    group('an Error out of an UNDO', () {
+      // The throw that happens while a failed run is already cleaning up. It used to leave the
+      // unwind loop entirely: every step still to be taken back stood, and the record closed with
+      // no rows in it.
+
+      ResolvedProgram twoWritesTheSecondOfWhichCannotBePutBack({bool throwsAnError = false}) =>
+          ProgramResolver(
+            registryOf(
+              steps: <String, (String, Step Function(Arguments))>{
+                'first': ('x:1', (Arguments a) => WritesAFile(path: '/one', content: '1')),
+                'stuck': (
+                  'x:2',
+                  (Arguments a) =>
+                      WritesAndItsUndoThrows(path: '/stuck', throwsAnError: throwsAnError),
+                ),
+                'fails': ('x:3', (Arguments a) => const Blocks('the disk went away')),
+              },
+            ),
+          ).resolve(
+            programOf('p', <(String, OnFailure, List<String>)>[
+              ('first', OnFailure.exit, <String>[]),
+              ('stuck', OnFailure.exit, <String>[]),
+              ('fails', OnFailure.exit, <String>[]),
+            ]),
+          );
+
+      test('does not stop the steps before it being taken back', () async {
+        final Harness h = Harness();
+        final RunRecord closed = await h.runner.run(
+          program: twoWritesTheSecondOfWhichCannotBePutBack(throwsAnError: true),
+          mode: Mode.run,
+          header: h.header(),
+        );
+
+        expect(h.files.deleted, contains('/one'));
+        expect(closed.steps, hasLength(3), reason: 'and the record still holds every row');
+      });
+
+      test('is said in the record, so the failed undo is not silent', () async {
+        final Harness h = Harness();
+        await h.runner.run(
+          program: twoWritesTheSecondOfWhichCannotBePutBack(throwsAnError: true),
+          mode: Mode.run,
+          header: h.header(),
+        );
+
+        expect(
+          h.recorder.logLines.where((String each) => each.startsWith('could not be taken back')),
+          hasLength(1),
+        );
+      });
+
+      test('THE INNOCENT NEIGHBOUR: an undo that returns is not reported as failed', () async {
+        // Without this, a version that logged the refusal on every undo would pass both probes
+        // above and tell an operator that a clean rollback had failed.
+        final Harness h = Harness();
+        await h.runner.run(program: twoWritesThenAFailure(), mode: Mode.run, header: h.header());
+
+        expect(
+          h.recorder.logLines.where((String each) => each.startsWith('could not be taken back')),
+          isEmpty,
+        );
+        expect(h.files.contents, isEmpty);
+      });
+    });
+  });
+
+  group('a recorder that refuses a line', () {
+    // WHAT A FULL EVENT FILE DOES TO A RUN. Every row is closed by recording it, so the write that
+    // refuses is the last thing a row does — and the row's answer, which used to be where the
+    // engine kept whether the step had applied, never came back. The unwind then never reached a
+    // row that HAD written, and the record said the step applied nothing.
+
+    ResolvedProgram writesThenFails() =>
+        ProgramResolver(
+          registryOf(
+            steps: <String, (String, Step Function(Arguments))>{
+              'half': ('x:1', (Arguments a) => WritesAFile(path: '/half', content: 'written')),
+              'fails': ('x:2', (Arguments a) => const Blocks('the disk went away')),
+            },
+          ),
+        ).resolve(
+          programOf('p', <(String, OnFailure, List<String>)>[
+            ('half', OnFailure.continueRun, <String>[]),
+            ('fails', OnFailure.exit, <String>[]),
+          ]),
+        );
+
+    Runner recordingInto(Harness h, Recorder recorder) =>
+        Runner(machine: h.machine, recorder: recorder, redactor: h.redactor);
+
+    test('leaves the row it refused still able to be taken back', () async {
+      final Harness h = Harness();
+      int seen = 0;
+      final RefusingRecorder recorder = RefusingRecorder(
+        h.recorder,
+        refuses: (RunEvent event) => event is StepFinished && seen++ == 0,
+      );
+
+      await recordingInto(
+        h,
+        recorder,
+      ).run(program: writesThenFails(), mode: Mode.run, header: h.header());
+
+      expect(h.files.written, contains('/half'));
+      expect(h.files.contents, isEmpty, reason: 'the write was taken back all the same');
+    });
+
+    test('refusing the same line a second time costs the walk nothing it already had', () async {
+      // The first refusal is answered by closing the row again, which needs the recorder to have
+      // recovered. A recorder that refuses every time it is asked throws out of the step entirely,
+      // and everything the walk had collected — the rows before this one AND the list the unwind
+      // walks — used to go with it: a machine changed by every step that had run was then neither
+      // taken back nor named anywhere.
+      final Harness h = Harness();
+      final RefusingRecorder recorder = RefusingRecorder(
+        h.recorder,
+        refuses: (RunEvent event) => event is StepFinished,
+      );
+
+      final RunRecord closed = await recordingInto(
+        h,
+        recorder,
+      ).run(program: writesThenFails(), mode: Mode.run, header: h.header());
+
+      expect(h.files.written, contains('/half'));
+      expect(h.files.contents, isEmpty, reason: 'what it wrote was still taken back');
+      expect(closed.end, isNotNull, reason: 'and the header still says the run ended');
+      expect(
+        closed.issues.single,
+        contains('half'),
+        reason: 'the row that could not be closed has no row of its own, so it is said here',
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a recorder that refuses nothing reports no issue', () async {
+      // Without this, a version that treated every row as refused would pass both probes above and
+      // put an issue on a run in which nothing went wrong.
+      final Harness h = Harness();
+      final RefusingRecorder recorder = RefusingRecorder(
+        h.recorder,
+        refuses: (RunEvent event) => false,
+      );
+
+      final RunRecord closed = await recordingInto(
+        h,
+        recorder,
+      ).run(program: writesThenFails(), mode: Mode.run, header: h.header());
+
+      expect(closed.steps, hasLength(2));
+      expect(closed.issues, isEmpty);
+      expect(h.files.contents, isEmpty);
+    });
   });
 
   group('a step whose POSTCONDITION threw', () {
@@ -467,4 +691,38 @@ void main() {
       );
     });
   });
+}
+
+/// A recorder that refuses to write the lines a test names, and keeps the rest.
+///
+/// The shape a full device has: `FileRecorder.record` hands the line to the operating system before
+/// it returns, so a partition with no room left throws out of it. Which line is refused is a value
+/// rather than a second class, because one refused line and a device that refuses whenever it is
+/// asked are the same failure at two lengths.
+final class RefusingRecorder implements Recorder {
+  /// Keeps everything [kept] would have kept, except what [refuses] answers true for.
+  RefusingRecorder(this.kept, {required this.refuses});
+
+  /// Where the lines that were not refused go, so a test can read them back.
+  final MemoryRecorder kept;
+
+  /// Which lines this recorder will not write.
+  final bool Function(RunEvent event) refuses;
+
+  @override
+  int get nextSequence => kept.nextSequence;
+
+  @override
+  void record(RunEvent Function(int sequence, DateTime at) build) {
+    // Built once and handed on already built, because calling the builder a second time would
+    // stamp the event with a second sequence number.
+    final RunEvent event = build(kept.nextSequence, DateTime.utc(2026));
+    if (refuses(event)) {
+      throw const FileSystemException('no space left on device');
+    }
+    kept.events.add(event);
+  }
+
+  @override
+  Future<void> close() => kept.close();
 }

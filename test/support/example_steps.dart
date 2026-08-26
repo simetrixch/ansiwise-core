@@ -471,17 +471,22 @@ final class NeedsItsValueToBeBuilt extends ObservingStep {
 /// arguments_and_ports` in this platform's plugin patches a workload declaration and then replaces
 /// the pods, and a delete that returns non-zero throws with the declaration already changed.
 ///
-/// IT THROWS AN [Exception], AND IT HAS NO [Error] TWIN, which is the one way it differs from
-/// [ChangesThenItsPostconditionThrows] beside the call site. That twin holds the Exception/Error
-/// axis still because both ends of it end in the same place. Here they do not: the catch that
-/// takes this throw is `on Exception` (step_execution.dart:492), so an [Error] out of an apply
-/// passes it, passes the outer catch as well, and leaves the write standing with no row in the
-/// record. A step for that case would drive ansiwise-core#66 rather than this contract,
-/// and it is named here so the missing twin is a statement instead of a silence.
+/// IT THROWS EITHER AN [Exception] OR AN [Error], and the row ends in the same place both times:
+/// the first act wrote, the second stopped, and nothing has read what the machine holds now. What
+/// differs is which of the engine's catches the throw meets — an [Error] used to pass the catch
+/// beside the apply and the one at the top of `execute` alike, reaching the runner's last catch,
+/// which closes a record with no rows while the write stands.
 final class ChangesThenItsApplyThrows extends ReversibleStep<String?> with FileStep {
-  ChangesThenItsApplyThrows({required this.path});
+  ChangesThenItsApplyThrows({required this.path, this.throwsAnError = false});
 
   final String path;
+
+  /// Whether its apply throws an [Error] rather than an [Exception].
+  ///
+  /// A value and not a second class of step, for the same reason
+  /// [ChangesThenItsPostconditionThrows.throwsAnError] is one: an [Exception] where the machine
+  /// refused, an [Error] where the step's own code has a bug in it — a cast, an index, a null.
+  final bool throwsAnError;
 
   @override
   String pathFor(StepContext context) => path;
@@ -498,6 +503,9 @@ final class ChangesThenItsApplyThrows extends ReversibleStep<String?> with FileS
   @override
   Future<void> apply(StepContext context) async {
     await super.apply(context);
+    if (throwsAnError) {
+      throw StateError('the second act read a value that was not there');
+    }
     throw CommandFailed(
       argv: const <String>['second'],
       exitCode: 1,
@@ -618,9 +626,17 @@ final class WritesButNeverSatisfied extends ReversibleStep<String?> with FileSte
 /// The shape a real one has: the file it is about to overwrite belongs to root, and the reading is
 /// refused before the step gets as far as writing.
 final class ThrowsWhileCapturing extends ReversibleStep<String?> with FileStep {
-  ThrowsWhileCapturing({required this.path});
+  ThrowsWhileCapturing({required this.path, this.throwsAnError = false});
 
   final String path;
+
+  /// Whether its capture throws an [Error] rather than an [Exception].
+  ///
+  /// The throw meets the catch at the top of `execute` either way — the capture runs outside the
+  /// try around the apply — and that catch used to ask for an [Exception], so an [Error] here left
+  /// the engine entirely and the run closed a record holding no rows about a step that had not yet
+  /// touched the machine.
+  final bool throwsAnError;
 
   @override
   String pathFor(StepContext context) => path;
@@ -632,17 +648,65 @@ final class ThrowsWhileCapturing extends ReversibleStep<String?> with FileStep {
   Future<FileContent> contentFor(StepContext context) async => const FileContent.text('written');
 
   @override
-  Future<String?> capture(StepContext context) async => throw CommandFailed(
-    argv: <String>['cat', path],
-    exitCode: 1,
-    stdout: '',
-    stderr: 'what stands in $path cannot be read, so nothing here could put it back',
-  );
+  Future<String?> capture(StepContext context) async {
+    if (throwsAnError) {
+      throw StateError('what stands in $path is not what this step can put back');
+    }
+    throw CommandFailed(
+      argv: <String>['cat', path],
+      exitCode: 1,
+      stdout: '',
+      stderr: 'what stands in $path cannot be read, so nothing here could put it back',
+    );
+  }
 
   @override
   Future<void> undo(StepContext context, String? captured) async => captured == null
       ? context.files.delete(path)
       : context.files.write(path, captured, mode: mode);
+}
+
+/// A step that writes and whose UNDO throws.
+///
+/// The one throw that happens while a failed run is already cleaning up. Its apply is ordinary and
+/// its postcondition holds, so the row succeeds and the unwind reaches it in the normal way; what
+/// fails is putting the change back. An [Error] here used to leave the unwind loop entirely, so
+/// every step still to be taken back was left standing and the record closed with no rows.
+///
+/// The shape a real one has: the tool the undo shells out to is gone by the time the undo runs,
+/// because an earlier step in the same unwind removed it.
+final class WritesAndItsUndoThrows extends ReversibleStep<String?> with FileStep {
+  WritesAndItsUndoThrows({required this.path, this.throwsAnError = false});
+
+  final String path;
+
+  /// Whether its undo throws an [Error] rather than an [Exception].
+  final bool throwsAnError;
+
+  @override
+  String pathFor(StepContext context) => path;
+
+  @override
+  int get mode => 0x1a4;
+
+  @override
+  Future<FileContent> contentFor(StepContext context) async => const FileContent.text('written');
+
+  @override
+  Future<String?> capture(StepContext context) => contentBefore(context);
+
+  @override
+  Future<void> undo(StepContext context, String? captured) async {
+    if (throwsAnError) {
+      throw StateError('the undo of $path read a value that was not there');
+    }
+    throw CommandFailed(
+      argv: <String>['restore', path],
+      exitCode: 1,
+      stdout: '',
+      stderr: 'what this step wrote to $path could not be put back',
+    );
+  }
 }
 
 /// A step that mints a credential while the run happens and publishes it.

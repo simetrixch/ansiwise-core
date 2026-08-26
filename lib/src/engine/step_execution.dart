@@ -66,6 +66,12 @@ final class StepExecution {
   /// publishes. A row that takes a value from a measurement is filled out of it — in the mode that
   /// changes things, which is the only mode in which the row that produces the value has done its
   /// work.
+  ///
+  /// [applied] is the RUN'S list of steps whose apply ran, and this method appends to it the moment
+  /// an apply is over. It is a parameter and not part of the answer because of what a throw does to
+  /// an answer: a row that had already written and then threw on its way out lost its entry
+  /// entirely, so the unwind never reached it and the write stood with the row's own kind still
+  /// telling the operator it could be taken back. A list the RUN owns cannot be lost by a step.
   Future<StepOutcome> execute({
     required ResolvedStep resolved,
     required Mode mode,
@@ -73,6 +79,7 @@ final class StepExecution {
     required Arguments answers,
     required DateTime start,
     Measurements? measurements,
+    List<AppliedStep>? applied,
   }) async {
     final StepName name = resolved.entry.step;
     final int firstEvent = recorder.nextSequence;
@@ -80,6 +87,9 @@ final class StepExecution {
     // does not throw on a sink that is not there. Nothing reads it: one step is not a program, and
     // a row taking a value is bound to a row of the same program by the resolver.
     final Measurements taken = measurements ?? Measurements(redactor);
+    // The same for the applied steps: a caller running one step alone has no unwind to feed, so it
+    // gets a list nothing reads rather than having to pass one.
+    final List<AppliedStep> appliedSoFar = applied ?? <AppliedStep>[];
 
     final PredicateName? blocking = _blockedBy(resolved, facts);
     if (blocking != null) {
@@ -157,26 +167,31 @@ final class StepExecution {
         mode: mode,
         start: start,
         firstEvent: firstEvent,
+        applied: appliedSoFar,
       );
-    } on Exception catch (failure) {
+    } on Object catch (failure) {
+      // EVERYTHING A STEP CAN THROW, and not only what implements Exception. An Error out of a
+      // step's own code — a cast, an index, a null, a StateError — is the step failing in exactly
+      // the way an Exception is: the row did not do what it said it would. Classified as an
+      // Exception alone, such a throw passed every catch here and reached Runner.run's `on Object`
+      // (runner.dart), which closes the record with no rows at all — so an operator read a record
+      // that held nothing about a run that had changed the machine. The check either side of the
+      // apply already answers Object for the same reason, and the engine holding two answers
+      // depending on which call site a throw met is what produced that record.
+      //
+      // WHAT ARRIVES HERE MAY HAVE WRITTEN, and that is why the applied steps are not carried in
+      // what this method returns. A recorder that refuses one line throws out of _finish, which
+      // every branch below calls from inside this try — including the branches that run after an
+      // apply. The row that threw is already in [appliedSoFar], put there the moment its apply was
+      // over, so the unwind reaches it whatever happens here.
+      //
+      // WHETHER A ROW ARRIVING HERE LEFT A READING BEHIND: no. The plan IS what a dry run judges a
+      // row by, so a row that threw composing it has none; a row that threw capturing never
+      // reached its apply, let alone the postcondition a real run judges it by; and a row that
+      // threw closing itself was judged by a reading that is already in its verdict.
       return _finish(
         resolved: resolved,
         verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
-        // NO APPLIED STEP, BECAUSE WHAT ARRIVES HERE BY THE ORDINARY PATHS CHANGED NOTHING. The
-        // plan and the capture both run before anything is written — the capture IS the undo
-        // snapshot taken before the apply — and an apply or a postcondition that throws an
-        // EXCEPTION is caught lower down, beside that snapshot, which is what an undo needs.
-        //
-        // TWO THROWS ARE OUTSIDE THAT SENTENCE, and each leaves a written change standing. An
-        // ERROR rather than an Exception out of the apply passes the catch at :492, which is
-        // `on Exception` as this one is, and reaches Runner.run's `on Object` (runner.dart:157)
-        // that closes the record with no rows at all. And a recorder refusing a line inside
-        // _finish hands a row whose apply HAS written to THIS catch, because every _finish call
-        // sits inside the try opened above. Both are ansiwise-core#66.
-        //
-        // NOR DID A ROW ARRIVING BY THOSE ORDINARY PATHS LEAVE A READING BEHIND. The plan IS what
-        // a dry run judges a row by, so a row that threw composing it has none; a row that threw
-        // capturing never reached its apply, let alone the postcondition a real run judges it by.
         standing: _standing(step, resolved, measured: false),
         start: start,
         firstEvent: firstEvent,
@@ -348,6 +363,7 @@ final class StepExecution {
     required Mode mode,
     required DateTime start,
     required int firstEvent,
+    required List<AppliedStep> applied,
   }) async {
     final ({CheckResult result, bool measured}) before = await _checked(step, context);
 
@@ -444,6 +460,7 @@ final class StepExecution {
           mode: mode,
           start: start,
           firstEvent: firstEvent,
+          applied: applied,
         );
     }
   }
@@ -456,6 +473,7 @@ final class StepExecution {
     required Mode mode,
     required DateTime start,
     required int firstEvent,
+    required List<AppliedStep> applied,
   }) async {
     switch (mode) {
       case Mode.test:
@@ -495,13 +513,17 @@ final class StepExecution {
 
         try {
           await step.apply(context);
-        } on Exception catch (failure) {
-          // CAUGHT HERE AND NOT AT THE TOP, and the difference is the whole of the undo contract.
-          // An apply that throws is the partial apply a step's undo exists for — it changed
-          // something and then stopped — and the capture taken above is exactly what putting that
-          // back needs. Letting the throw reach the outer catch loses it: that one answers without
-          // an applied step, so the unwind never reaches this step at all, and what it changed
-          // before it threw stands while its kind still tells the operator it can be taken back.
+        } on Object catch (failure) {
+          // THE APPLY RAN, SO THE RUN IS TOLD BEFORE ANYTHING ELSE HAPPENS. An apply that throws is
+          // the partial apply a step's undo exists for — it changed something and then stopped —
+          // and the capture taken above is exactly what putting that back needs.
+          //
+          // EVERYTHING IT CAN THROW IS CAUGHT, and not only what implements Exception. An Error out
+          // of a plugin's apply used to pass this catch and the one at the top of execute() alike,
+          // reaching Runner.run's `on Object`, which closes the record with no rows: the write
+          // stood, nothing was taken back, and the record an operator would read it out of was
+          // empty. A step that failed is a failed row whatever the Dart type of its throw.
+          applied.add(_applied(resolved, step, context, captured));
           return _finish(
             resolved: resolved,
             verdict: _verdictFor(resolved.entry.onFailure, failure.toString()),
@@ -514,9 +536,13 @@ final class StepExecution {
             standing: _standing(step, resolved, measured: false),
             start: start,
             firstEvent: firstEvent,
-            applied: _applied(resolved, step, context, captured),
           );
         }
+
+        // THE APPLY IS OVER AND THE RUN IS TOLD, before a postcondition is read and before a line
+        // is recorded. Everything from here on can throw, and none of it can take this entry away
+        // again: the machine holds what the step wrote, so the unwind has to be able to reach it.
+        applied.add(_applied(resolved, step, context, captured));
 
         if (step is ExchangeStep) {
           return _exchangeFinished(
@@ -526,16 +552,12 @@ final class StepExecution {
             sink: sink,
             start: start,
             firstEvent: firstEvent,
-            captured: captured,
           );
         }
 
         // READ THE SAME WAY THE CHECK BEFORE THE APPLY IS, and that is the whole of it. It is the
         // same method, and a throw out of it is the step failing to ANSWER rather than the work
-        // failing — so it becomes a refusal here instead of leaving this branch. Read directly, the
-        // throw went to the catch at the top of execute(), which answers with no applied step: the
-        // unwind then never reached the one row that had written and could not confirm what it
-        // wrote, and its kind went on telling the operator it could be taken back. This is the only
+        // failing — so it becomes a refusal here instead of leaving this branch. This is the only
         // place a throw meets a machine this run has already changed.
         final ({CheckResult result, bool measured}) after = await _checked(step, context);
         if (after.result is! Satisfied) {
@@ -554,7 +576,6 @@ final class StepExecution {
             standing: _standing(step, resolved, measured: after.measured),
             start: start,
             firstEvent: firstEvent,
-            applied: _applied(resolved, step, context, captured),
           );
         }
         return _finish(
@@ -565,7 +586,6 @@ final class StepExecution {
           standing: _standing(step, resolved, measured: true),
           start: start,
           firstEvent: firstEvent,
-          applied: _applied(resolved, step, context, captured),
         );
     }
   }
@@ -593,7 +613,6 @@ final class StepExecution {
     required StepMeasurements sink,
     required DateTime start,
     required int firstEvent,
-    required Object? captured,
   }) {
     final List<MeasurementName> owed = resolved.publishesAs;
     if (owed.isEmpty) {
@@ -607,7 +626,6 @@ final class StepExecution {
         standing: _standing(step, resolved, measured: true),
         start: start,
         firstEvent: firstEvent,
-        applied: _applied(resolved, step, context, captured),
       );
     }
     final List<MeasurementName> missing = <MeasurementName>[
@@ -621,7 +639,6 @@ final class StepExecution {
         standing: _standing(step, resolved, measured: true),
         start: start,
         firstEvent: firstEvent,
-        applied: _applied(resolved, step, context, captured),
       );
     }
     context.log.info(
@@ -633,7 +650,6 @@ final class StepExecution {
       standing: _standing(step, resolved, measured: true),
       start: start,
       firstEvent: firstEvent,
-      applied: _applied(resolved, step, context, captured),
     );
   }
 
@@ -795,6 +811,10 @@ final class StepExecution {
   /// [standing] has no default, and that is deliberate. Every branch above states how much it
   /// measured, so a branch added later cannot inherit a claim nobody made for it — and "proven"
   /// inherited by accident is the exact shape of a run claiming more than it has.
+  ///
+  /// **It records, and recording can be refused.** A full event file throws out of the call below,
+  /// and then this row's answer never comes back — which is why whether the step applied is not
+  /// carried in that answer. It is already in the run's list of applied steps.
   StepOutcome _finish({
     required ResolvedStep resolved,
     required Verdict verdict,
@@ -802,7 +822,6 @@ final class StepExecution {
     required DateTime start,
     required int firstEvent,
     StepPlan? plan,
-    AppliedStep? applied,
   }) {
     final DateTime end = machine.clock.now();
     final int lastEvent = recorder.nextSequence;
@@ -834,7 +853,6 @@ final class StepExecution {
             ? <String>[verdict.reason]
             : const <String>[],
       ),
-      applied: applied,
     );
   }
 }
@@ -843,17 +861,10 @@ final class StepExecution {
 @immutable
 final class StepOutcome {
   /// Records what one entry produced.
-  const StepOutcome({required this.record, this.applied});
+  const StepOutcome({required this.record});
 
   /// The row this entry becomes.
   final StepRecord record;
-
-  /// The step, present only when its apply actually ran.
-  ///
-  /// This is what the unwind needs. A step that was skipped, or that had nothing to do, or that was
-  /// only planned, changed nothing and must not be undone — undoing it would be a mutation nobody
-  /// asked for, performed while cleaning up after a failure.
-  final AppliedStep? applied;
 
   /// Whether the run may continue past this entry.
   bool get continues => record.verdict.continues;

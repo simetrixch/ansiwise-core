@@ -238,18 +238,31 @@ final class Runner {
     final List<String> issues = <String>[];
 
     for (final ResolvedStep step in program.steps) {
-      final StepOutcome outcome = await execution.execute(
-        resolved: step,
-        mode: mode,
-        facts: facts,
-        answers: answers,
-        start: machine.clock.now(),
-        measurements: measurements,
-      );
-      records.add(outcome.record);
-      if (outcome.applied case final AppliedStep entry) {
-        applied.add(entry);
+      final StepOutcome outcome;
+      try {
+        outcome = await execution.execute(
+          resolved: step,
+          mode: mode,
+          facts: facts,
+          answers: answers,
+          start: machine.clock.now(),
+          measurements: measurements,
+          applied: applied,
+        );
+      } on Object catch (thrown) {
+        // A THROW THAT GOT PAST THE STEP'S OWN CATCH ENDS THE WALK AND KEEPS EVERYTHING SO FAR.
+        // What can still arrive here is the recorder refusing a line: [StepExecution] closes every
+        // row by recording it, so a full event file throws out of the last thing a row does. Left
+        // to reach the catch in [run], that took the rows the walk already had AND the list the
+        // unwind walks — a machine changed by twenty steps was then neither taken back nor named.
+        //
+        // The step that threw has no row, because building one is what threw. Its name and the
+        // throw go into the issues instead, which is the only place left that an operator reads —
+        // the usual place, the last row of the record, is the one that could not be written.
+        issues.add('${step.entry.step}: $thrown');
+        return _Walk(records: records, applied: applied, issues: issues, ended: true);
       }
+      records.add(outcome.record);
       // A failure the run carried on past is what the closing line reports. One that ended the run
       // needs no entry: the run stopped, and the last step of the record is the reason.
       if (outcome.record.verdict case final Failed failed when failed.continues) {
