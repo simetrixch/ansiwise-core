@@ -21,12 +21,24 @@ import 'redactor.dart';
 ///   do, and a step that was only planned all changed nothing. Undoing one of those would be a
 ///   mutation nobody asked for, performed while cleaning up after a failure — the worst moment for
 ///   a surprise.
-/// - **A step that cannot be taken back is passed over and said so.** It declared that in its own
-///   class, and the dry run already told the operator where that point was.
+/// - **A step that cannot be taken back STOPS the unwind, and everything applied before it stands.**
+///   It declared that in its own class or the program said `undo: false` for it, and either way the
+///   run announced the boundary before it started.
 ///
-/// An undo that itself fails does not stop the rest. The remaining steps are still undone, and every
-/// failure is recorded — the alternative leaves the machine in a state that is neither the one it
-/// started in nor the one the run was heading for, with no record of how far back it got.
+/// **Why the boundary stops it instead of being passed over.** The steps run in order, so a step
+/// that ran EARLIER can hold what a later one wrote — a directory holding a file, an account owning
+/// a key, a container holding what was put in it. Undoing the earlier step therefore removes what
+/// the later one left behind, which is exactly the thing the run has just said would survive.
+/// Measured on a real installation: a run said before it started that from step 8 it could not be
+/// taken back because what that step installs leaves the data it wrote behind, and then its unwind
+/// deleted the thing that data sat inside, made four steps earlier. The record said two things that
+/// cannot both be true.
+///
+/// **An undo that FAILS does not stop the rest, and that is a different question.** The boundary is
+/// a fact known before the run and told to the operator; a failed undo is discovered while cleaning
+/// up, and how much of that step still stands is exactly what nobody knows. Stopping on it would
+/// leave more standing than the run ever announced, on a guess. So the remaining steps are still
+/// undone and every failure is recorded.
 final class Unwind {
   /// Creates an unwind against [machine], reporting to [recorder].
   const Unwind({
@@ -48,14 +60,20 @@ final class Unwind {
   /// The quietest level this run writes, carried from the runner.
   final LogLevel logLevel;
 
-  /// Undoes [applied] from the newest backwards.
+  /// Undoes [applied] from the newest backwards, and answers what is left standing.
   ///
   /// The list is in the order the steps ran; this walks it in reverse. [answers] is the same bag the
   /// run was started with, because a step that read an answer to decide what it wrote reads the same
   /// answer to decide what to take back — an undo given an empty bag would fail on the one path
   /// where failing is least affordable.
-  Future<void> undo(List<AppliedStep> applied, Facts facts, Arguments answers) async {
-    for (final AppliedStep entry in applied.reversed) {
+  ///
+  /// The answer is the names of the steps still on the machine, in the order they ran: the first one
+  /// that could not be taken back and everything applied before it. It is empty where the walk
+  /// reached the beginning. **It is returned rather than logged**, because it is what somebody
+  /// deciding what to do to the machine next reads, and that decision is not made out of log lines.
+  Future<List<String>> undo(List<AppliedStep> applied, Facts facts, Arguments answers) async {
+    for (int at = applied.length - 1; at >= 0; at -= 1) {
+      final AppliedStep entry = applied[at];
       final Step step = entry.step;
       final RecordingLogger log = RecordingLogger(
         recorder: recorder,
@@ -68,7 +86,7 @@ final class Unwind {
             ? step.irreversibleReason
             : 'the step does not say how it could be taken back';
         log.warn('not taken back: $reason');
-        continue;
+        return _stopsHere(applied, at, log);
       }
 
       // The operator switched it off for this program. A step that CAN be undone is not always one
@@ -83,7 +101,7 @@ final class Unwind {
         log.warn(
           'not taken back: this program says undo: false for this step, so what it did stands',
         );
-        continue;
+        return _stopsHere(applied, at, log);
       }
 
       log.info('taking back');
@@ -98,6 +116,24 @@ final class Unwind {
         log.warn('could not be taken back: $failure');
       }
     }
+    return const <String>[];
+  }
+
+  /// The names of everything from the beginning up to and including [at], said and then returned.
+  ///
+  /// The line is written under the step that stopped the walk, directly after the line saying it was
+  /// not taken back, so a reader of the record meets the consequence beside the cause.
+  List<String> _stopsHere(List<AppliedStep> applied, int at, RecordingLogger log) {
+    final List<String> standing = <String>[
+      for (final AppliedStep each in applied.take(at + 1)) each.name.value,
+    ];
+    final int before = standing.length - 1;
+    log.warn(
+      'the unwind stops here: what this step did stands, and so do the $before step(s) applied '
+      'before it, because a step that ran earlier can hold what this one wrote — '
+      '${standing.join(', ')} are still on this machine',
+    );
+    return standing;
   }
 
   StepContext _contextFor(AppliedStep entry, Facts facts, Arguments answers) => StepContext(

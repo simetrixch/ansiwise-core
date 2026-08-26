@@ -50,8 +50,11 @@ final class RunRecord {
   /// The steps this run applied and did NOT take back, by the name a program file writes.
   ///
   /// Empty for every run that either changed nothing or unwound what it changed. Not empty means the
-  /// machine is in a state no run produced on purpose: something failed, the steps before it had
-  /// already acted, and the unwind that would have taken them back was deliberately not performed.
+  /// machine is in a state no run produced on purpose, and there are exactly two ways to get there.
+  /// The unwind was deliberately not performed, and then this names every step that had acted. Or
+  /// the unwind ran and stopped at a step it could not take back, and then this names that step and
+  /// everything applied before it — which stand because a step that ran earlier can hold what a
+  /// later one wrote, so taking it back would remove what the run has just said would survive.
   ///
   /// **A field and not a log line.** Whoever reads the result decides what to do to a machine next,
   /// and a warning among the log entries is not where that decision is made. A run that could have

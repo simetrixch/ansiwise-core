@@ -100,13 +100,16 @@ final class Runner {
       final Facts facts = await _measure(program, answers);
       final _Walk walk = await _walkSteps(program, mode, facts, answers);
 
-      // What the run applied and did not take back. Empty unless the unwind was turned off, which
-      // is the one way a failed run leaves the machine in a state nothing produced on purpose.
+      // What the run applied and did not take back. Empty for a run that changed nothing and for
+      // one whose unwind reached the beginning; not empty means the machine is in a state nothing
+      // produced on purpose, and it is read from the unwind itself rather than worked out here —
+      // TWO things fill it now. The operator switched the unwind off, or the unwind ran and stopped
+      // at a step it could not take back, which leaves that step and everything before it standing.
       List<String> leftStanding = const <String>[];
 
       if (walk.ended && walk.applied.isNotEmpty) {
         if (allowUnwind) {
-          await Unwind(
+          leftStanding = await Unwind(
             machine: machine,
             recorder: recorder,
             redactor: redactor,

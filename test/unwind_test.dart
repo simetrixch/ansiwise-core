@@ -665,18 +665,26 @@ void main() {
           ),
         );
 
-    test('stands, while the steps around it are still taken back', () async {
+    test('stands, and the unwind stops there rather than reaching past it', () async {
+      // The switch is about one step; what it does to the run is not. `first` wrote /one and
+      // `second` wrote /two on top of a run that already held /one, so taking /one back removes
+      // ground /two was put on — and the run had already announced that `second` would stand.
       final Harness h = Harness();
       await h.runner.run(program: withTheSecondLeftStanding(), mode: Mode.run, header: h.header());
 
-      expect(
-        h.files.deleted,
-        <String>['/one'],
-        reason:
-            'the switch is about ONE step; a run that stopped unwinding at it would leave behind '
-            'everything before it as well, which nobody asked for',
+      expect(h.files.deleted, isEmpty);
+      expect(h.files.contents.keys, containsAll(<String>['/one', '/two']));
+    });
+
+    test('and the record names it and everything applied before it', () async {
+      final Harness h = Harness();
+      final RunRecord closed = await h.runner.run(
+        program: withTheSecondLeftStanding(),
+        mode: Mode.run,
+        header: h.header(),
       );
-      expect(h.files.contents.keys, contains('/two'));
+
+      expect(closed.leftStanding, <String>['first', 'second'], reason: 'in the order they ran');
     });
 
     test('and this run says before it starts that it cannot take that step back', () {
@@ -688,6 +696,111 @@ void main() {
         reason:
             'learning at the moment an unwind reaches the step that it will not be undone is '
             'learning it too late',
+      );
+    });
+  });
+
+  group('a run past its point of no return', () {
+    // MEASURED ON A REAL INSTALLATION. A run said before it started that from step 8 of 88 it could
+    // not be taken back, because what that step installs leaves the data it wrote behind. The run
+    // failed at step 13, and its unwind then deleted the thing that data sat inside — made four
+    // steps earlier, and reversible. So the data did not stay behind, and the record said two
+    // things that cannot both be true: that the step was not taken back, and that what its data
+    // lived in was.
+    //
+    // Nothing there was a step behaving badly. The step that could not be taken back stated its
+    // limit correctly and the earlier one deleted exactly what it had made. It is the composition
+    // that was wrong.
+
+    ResolvedProgram aDirectoryThenSomethingIrreversibleInIt() =>
+        ProgramResolver(
+          registryOf(
+            steps: <String, (String, Step Function(Arguments))>{
+              'ground': ('x:1', (Arguments a) => WritesAFile(path: '/ground', content: 'made')),
+              'irreversible': (
+                'x:2',
+                (Arguments a) =>
+                    RunsACommand(argv: const <String>['mint'], leaves: '/ground/minted'),
+              ),
+              'later': ('x:3', (Arguments a) => WritesAFile(path: '/later', content: 'l')),
+              'fails': ('x:4', (Arguments a) => const Blocks('the disk went away')),
+            },
+          ),
+        ).resolve(
+          programOf('p', <(String, OnFailure, List<String>)>[
+            ('ground', OnFailure.exit, <String>[]),
+            ('irreversible', OnFailure.exit, <String>[]),
+            ('later', OnFailure.exit, <String>[]),
+            ('fails', OnFailure.exit, <String>[]),
+          ]),
+        );
+
+    Future<RunRecord> runIt(Harness h) {
+      // The command leaves its file behind, the way the real one would, so the step really applies.
+      h.shell.changes('mint', () => h.files.contents['/ground/minted'] = '');
+      return h.runner.run(
+        program: aDirectoryThenSomethingIrreversibleInIt(),
+        mode: Mode.run,
+        header: h.header(),
+      );
+    }
+
+    test('does not take back what the step it could not undo was built on', () async {
+      final Harness h = Harness();
+      await runIt(h);
+
+      expect(h.files.contents.keys, contains('/ground'));
+      expect(
+        h.files.deleted,
+        isNot(contains('/ground')),
+        reason: 'the run said the minted value stands, and it stands inside /ground',
+      );
+    });
+
+    test('still takes back everything applied AFTER it', () async {
+      // The other direction, and it is what makes stopping at the boundary safe rather than merely
+      // cautious: a step that ran later cannot be holding what an earlier one wrote, so undoing it
+      // takes nothing away from what stands.
+      final Harness h = Harness();
+      await runIt(h);
+
+      expect(h.files.deleted, contains('/later'));
+      expect(h.files.contents.containsKey('/later'), isFalse);
+    });
+
+    test('the RECORD names what is standing, so it is not only a log line', () async {
+      final Harness h = Harness();
+      final RunRecord closed = await runIt(h);
+
+      expect(closed.leftStanding, <String>['ground', 'irreversible']);
+    });
+
+    test('and it says why the unwind stopped, beside the step that stopped it', () async {
+      final Harness h = Harness();
+      await runIt(h);
+
+      expect(
+        h.recorder.logLines.where((String each) => each.startsWith('the unwind stops here')).single,
+        allOf(contains('ground'), contains('irreversible')),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a run with no boundary still unwinds to the beginning', () async {
+      // Without this, a version that stopped the unwind at the first step it looked at would pass
+      // every probe above and take nothing back on any failed run at all.
+      final Harness h = Harness();
+      final RunRecord closed = await h.runner.run(
+        program: twoWritesThenAFailure(),
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(h.files.deleted, <String>['/two', '/one']);
+      expect(h.files.contents, isEmpty);
+      expect(closed.leftStanding, isEmpty);
+      expect(
+        h.recorder.logLines.where((String each) => each.startsWith('the unwind stops here')),
+        isEmpty,
       );
     });
   });
