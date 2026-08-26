@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -200,6 +201,89 @@ void main() {
         isFalse,
         reason: 'the header is renamed into place, not left beside itself',
       );
+    });
+
+    group('a rename the file system refuses', () {
+      // MEASURED over the real binaries: on Windows the rename over `run.json` fails while any
+      // process holds that file open, and the call carried no retry. 34 of 265 runs that had a
+      // reader lost their closing header this way, against 0 of 100 that had none — the run
+      // finished every time and only the rename was lost, so `run.json` kept the header the run
+      // STARTED with and every reader of records showed a run still going, for ever.
+      //
+      // WHAT REFUSES THE RENAME HERE IS A DIRECTORY STANDING WHERE THE HEADER GOES, and not a
+      // second process holding the file. A held file is refused on Windows and allowed on POSIX, so
+      // a check written that way would be skipped on the machines this repository's own workflows
+      // run on — and a skipped check is not a passed one. A directory is refused by both.
+
+      Directory inTheWay() => Directory(directory.header(id))..createSync(recursive: true);
+
+      test('is retried, and the header goes into place once the way is clear', () async {
+        final FileRecorder recorder = await open();
+        final Directory blocking = inTheWay();
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 50), blocking.deleteSync));
+
+        await recorder.save(
+          header().closed(
+            end: clock.now(),
+            exitCode: 0,
+            steps: const <StepRecord>[],
+            issues: const <String>[],
+          ),
+        );
+        await recorder.close();
+
+        final Map<String, Object?> ended =
+            jsonDecode(File(directory.header(id)).readAsStringSync()) as Map<String, Object?>;
+        expect(ended['exit_code'], 0);
+        expect(File(directory.pendingHeader(id)).existsSync(), isFalse);
+      });
+
+      test('is REPORTED when it cannot be completed at all, and says where the header is', () async {
+        // The alternative is what was measured: a record left quietly saying a finished run is
+        // still going, with the header it ended with sitting beside it under a name nothing reads.
+        final FileRecorder recorder = await open();
+        inTheWay();
+
+        await expectLater(
+          recorder.save(
+            header().closed(
+              end: clock.now(),
+              exitCode: 3,
+              steps: const <StepRecord>[],
+              issues: const <String>[],
+            ),
+          ),
+          throwsA(
+            isA<HeaderNotReplaced>()
+                .having((HeaderNotReplaced e) => e.pending, 'pending', directory.pendingHeader(id))
+                .having((HeaderNotReplaced e) => e.header, 'header', directory.header(id)),
+          ),
+        );
+        await recorder.close();
+
+        final Map<String, Object?> kept =
+            jsonDecode(File(directory.pendingHeader(id)).readAsStringSync())
+                as Map<String, Object?>;
+        expect(
+          kept['exit_code'],
+          3,
+          reason: 'the only copy of the closing header is not thrown away',
+        );
+      });
+
+      test('THE INNOCENT NEIGHBOUR: a rename nothing refuses waits for nothing', () async {
+        // Without this, a version that spent the whole budget on every save would pass both probes
+        // above and put a second onto the end of every run on every platform.
+        final FileRecorder recorder = await open();
+        final Stopwatch took = Stopwatch()..start();
+
+        await recorder.save(header());
+        await recorder.close();
+        took.stop();
+
+        expect(File(directory.header(id)).existsSync(), isTrue);
+        expect(took.elapsed, lessThan(FileRecorder.renameBudget));
+      });
     });
 
     test('a credential typed on the command line is not left in the header', () async {

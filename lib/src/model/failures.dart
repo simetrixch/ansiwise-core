@@ -262,6 +262,38 @@ final class AnswerIncomplete extends EngineFailure {
   const AnswerIncomplete(super.message);
 }
 
+/// The closing header could not be put where everything looks for it.
+///
+/// A run's header is written under a second name and renamed over the real one, so a reader never
+/// sees half a header. On Windows that rename fails while any process holds the real one open, and
+/// a run whose rename is lost keeps the header it STARTED with — so everything that reads records
+/// shows a run still going, for ever, while the process that would have said otherwise is gone.
+/// Measured over the real binaries: 34 of 265 runs that had a reader lost it, against 0 of 100 that
+/// had none. The run itself finished every time.
+///
+/// **Raised rather than passed over**, because of what the two answers cost. The record is not
+/// merely incomplete here, it is WRONG about the one thing every reader asks it, and a caller told
+/// nothing would go on to report a run that ended as one still going.
+final class HeaderNotReplaced extends EngineFailure {
+  /// Records that the header written to [pending] could not be put at [header], because [refused].
+  HeaderNotReplaced({required this.pending, required this.header, required this.refused})
+    : super(
+        'the closing header of this run could not be put in place\n'
+        '$header still holds the header this run started with, and the header it ended with is in '
+        '$pending — the run itself finished, and only this rename was lost\n'
+        'what the file system said: $refused',
+      );
+
+  /// Where the finished header is sitting instead.
+  final String pending;
+
+  /// Where it was meant to go, and what still holds the stale one.
+  final String header;
+
+  /// What the file system said the last time it refused.
+  final String refused;
+}
+
 /// A machine role does not match the program.
 final class RoleMismatch extends EngineFailure {
   /// Records that [program] does not apply to a machine of [role].

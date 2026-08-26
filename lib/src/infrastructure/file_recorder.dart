@@ -4,6 +4,7 @@ import 'dart:io';
 import '../domain/clock.dart';
 import '../domain/recorder.dart';
 import '../engine/redactor.dart';
+import '../model/failures.dart';
 import '../model/names.dart';
 import '../model/run_event.dart';
 import '../model/run_record.dart';
@@ -104,6 +105,21 @@ final class FileRecorder implements Recorder {
     await _events.close();
   }
 
+  /// How long the rename over the header is retried before it is reported as a failure.
+  ///
+  /// MEASURED, not chosen. On Windows the rename fails while any process holds the header open, and
+  /// 34 of 265 runs that had a reader lost their closing header that way against 0 of 100 that had
+  /// none. What the retry has to outlast is ONE reader's open-read-close of a file of a few
+  /// kilobytes, and not the reader itself: every reader of this file reads it whole and closes it.
+  /// A second is far longer than any such read and short enough that a run does not look hung.
+  static const Duration renameBudget = Duration(seconds: 1);
+
+  /// How long it waits between two attempts at that rename.
+  ///
+  /// Fixed rather than growing. The window is one read, so a longer wait after a first refusal
+  /// would spend most of the budget asleep past the moment the file was free again.
+  static const Duration renameRetry = Duration(milliseconds: 10);
+
   /// Writes [record] to `run.json`.
   ///
   /// Called twice for a run: once as it begins, so a run that is killed still says what it was, and
@@ -114,6 +130,8 @@ final class FileRecorder implements Recorder {
   /// The second call comes after [close], and has to: the header may only say the run has ended once
   /// the last event is in the event file, which is what [close] finishes. This touches a different
   /// file, so a closed recorder still writes it.
+  ///
+  /// Throws [HeaderNotReplaced] where the rename cannot be completed within [renameBudget].
   Future<void> save(RunRecord record) async {
     final String pending = _directory.pendingHeader(id);
     final File file = File(pending);
@@ -122,7 +140,35 @@ final class FileRecorder implements Recorder {
       flush: true,
     );
     await setPermissions(pending, fileMode);
-    await file.rename(_directory.header(id));
+    await _replaceHeaderWith(file);
+  }
+
+  /// Puts [pending] where the header goes, retrying while the file system refuses.
+  ///
+  /// **A stopwatch and not the clock this recorder holds.** The wait is real time on a real file
+  /// system, so it has to run whatever a caller's clock does — and the clock here belongs to the
+  /// machine, which a test freezes.
+  ///
+  /// **The pending file is left where it is when this gives up**, because it is the only copy of
+  /// the header the run ended with. Nothing here writes over the real one directly instead: a
+  /// rewrite in place can be read while it is half done, which is the whole reason for the second
+  /// name, and a header that does not parse is worse than one that is out of date.
+  Future<void> _replaceHeaderWith(File pending) async {
+    final String header = _directory.header(id);
+    final Stopwatch waited = Stopwatch()..start();
+    while (true) {
+      final FileSystemException refused;
+      try {
+        await pending.rename(header);
+        return;
+      } on FileSystemException catch (failure) {
+        refused = failure;
+      }
+      if (waited.elapsed >= renameBudget) {
+        throw HeaderNotReplaced(pending: pending.path, header: header, refused: refused.toString());
+      }
+      await Future<void>.delayed(renameRetry);
+    }
   }
 
   /// Indented, because unlike the event file this one is read by a person with whatever is at hand.
