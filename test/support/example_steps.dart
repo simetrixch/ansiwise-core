@@ -293,6 +293,43 @@ final class Measures extends ObservingStep {
 /// The row declares that the command only looks. No code chose that command, so the framework
 /// cannot verify the claim — the step says so through its trust flag, and the engine stamps every
 /// row of it declared, however the wait comes out.
+/// A wait that has to wait ONCE, so its apply really runs.
+///
+/// The shape no check in this suite had: a step that is neither reversible nor irreversible AND whose
+/// apply happened, so it reaches the run's applied list. A wait answers [Ready] while the thing it
+/// waits for is not true yet (step.dart:144-148), which is how an observing step comes to be applied
+/// at all — every other observing step in this file is satisfied outright and never gets there.
+///
+/// The counter is an instance field and that is enough: the engine builds a step once per row
+/// (step_execution.dart:147), so the check, the apply and the postcondition of one row share this
+/// object while the resolver's and the boundary's own copies are their own.
+final class WaitsOnceThenHolds extends ObservingStep with WaitStep {
+  WaitsOnceThenHolds();
+
+  bool _asked = false;
+
+  @override
+  bool get answersOnTrust => true;
+
+  @override
+  Duration get deadline => const Duration(seconds: 60);
+
+  @override
+  Duration get interval => Duration.zero;
+
+  @override
+  String get waitingFor => 'the thing this row stands in for';
+
+  @override
+  Future<({bool held, String? saw})> holds(StepContext context) async {
+    if (_asked) {
+      return (held: true, saw: null);
+    }
+    _asked = true;
+    return (held: false, saw: 'it has not happened yet');
+  }
+}
+
 final class WaitsOnTheRowsWord extends ObservingStep with WaitStep {
   const WaitsOnTheRowsWord({required this.command});
 

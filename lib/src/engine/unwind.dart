@@ -81,6 +81,23 @@ final class Unwind {
         step: entry.name,
       );
 
+      // MEASURING IS NOT DOING, and this is the one place that has to agree with the boundary about
+      // that. An observing step leaves nothing behind, so whatStands() skips it when it composes what
+      // the run ANNOUNCES before it starts (point_of_no_return.dart:76-79, in those words). A WAIT is
+      // an observing step and it applies whenever the thing it waits for is not true yet
+      // (step.dart:144-148), so a wait that had to wait reaches this list like any other applied
+      // step. Stopping here would end the unwind at a step the run had just told the operator was
+      // not a boundary.
+      //
+      // Measured on a program of three rows — a step that writes, a wait that had to wait, and a
+      // failing row under `on_failure: exit`. The run announced "nothing — every step can be taken
+      // back", and then left the written file standing with the wait named as the boundary. The
+      // announcement and the unwind are one answer to one question, and this is the second half of
+      // it.
+      if (step is ObservingStep) {
+        continue;
+      }
+
       if (step is! ReversibleStep) {
         final String reason = step is IrreversibleStep
             ? step.irreversibleReason

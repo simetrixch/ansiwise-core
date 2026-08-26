@@ -785,6 +785,63 @@ void main() {
       );
     });
 
+    test('a wait that had to wait does not stop the unwind, and nothing announced that it would', () async {
+      // MEASURING IS NOT DOING, and the announcement and the unwind have to agree about it. A wait is
+      // an observing step: it answers Ready while what it waits for is not true yet, so its apply
+      // runs and it lands in the applied list — while whatStands() skips observing steps on purpose,
+      // so the run announces no boundary at all. A walk that stopped at "not a ReversibleStep" would
+      // stop here, leave the write before it standing, and contradict what the run had just said.
+      //
+      // This is the one shape the suite could not see: every other observing step in the fixtures is
+      // satisfied outright and never reaches the applied list, and point_of_no_return_test.dart's own
+      // case at :134 is about the ANNOUNCEMENT, which is the half that was already right.
+      final Harness h = Harness();
+      final ResolvedProgram program =
+          ProgramResolver(
+            registryOf(
+              steps: <String, (String, Step Function(Arguments))>{
+                'first': ('x:1', (Arguments a) => WritesAFile(path: '/one', content: '1')),
+                'waits': ('x:2', (Arguments a) => WaitsOnceThenHolds()),
+                // Reversible on purpose, so this program announces NO boundary at all: a Blocks would be
+                // irreversible by nature and the run would name it, which is a different case with a
+                // different answer.
+                'fails': ('x:3', (Arguments a) => WritesButNeverSatisfied(path: '/unproven')),
+              },
+            ),
+          ).resolve(
+            programOf('p', <(String, OnFailure, List<String>)>[
+              ('first', OnFailure.exit, <String>[]),
+              ('waits', OnFailure.exit, <String>[]),
+              ('fails', OnFailure.exit, <String>[]),
+            ]),
+          );
+
+      expect(
+        pointOfNoReturnSaid(program),
+        isNull,
+        reason: 'the run announces no boundary, which is what the unwind then has to honour',
+      );
+
+      final RunRecord closed = await h.runner.run(
+        program: program,
+        mode: Mode.run,
+        header: h.header(),
+      );
+
+      expect(
+        h.files.contents,
+        isEmpty,
+        reason:
+            'the write before the wait is what a walk stopping at the wait leaves on the machine',
+      );
+      expect(h.files.deleted, <String>['/unproven', '/one']);
+      expect(closed.leftStanding, isEmpty);
+      expect(
+        h.recorder.logLines.where((String each) => each.startsWith('the unwind stops here')),
+        isEmpty,
+      );
+    });
+
     test('THE INNOCENT NEIGHBOUR: a run with no boundary still unwinds to the beginning', () async {
       // Without this, a version that stopped the unwind at the first step it looked at would pass
       // every probe above and take nothing back on any failed run at all.
