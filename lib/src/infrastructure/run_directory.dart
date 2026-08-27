@@ -45,6 +45,21 @@ final class RunDirectory {
   /// The event file of run [id].
   String events(RunId id) => p.join(of(id), 'events.jsonl');
 
+  /// Where a run says why it NEVER STARTED.
+  ///
+  /// **BESIDE THE RUNS AND NOT INSIDE ONE, because inside one is the failure.** Everything a run
+  /// says once it is going goes into its own directory — and a run that dies while it is still
+  /// working out what it is has no directory yet, and never makes one. The record it would have
+  /// written is exactly what is missing, so the reason has to stand somewhere that exists before it.
+  ///
+  /// **IT IS FOR THE ONE READER WHO CANNOT SEE THE OUTPUT.** A run started at a command line writes
+  /// its refusal to standard error and a person reads it. A run started over the REST surface is a
+  /// DETACHED CHILD whose standard error is a pipe nobody reads — the launcher writes its standard
+  /// input and forgets it — so the same sentence reaches nobody, and the caller is left with an
+  /// absence: "accepted but never wrote its record". Measured on a real installation, three times in
+  /// one evening, and each diagnosis had to be reconstructed by running the child by hand.
+  String startupLog(RunId id) => p.join(root, '${id.value}.startup.log');
+
   /// The name the header is written under before it replaces the one that is there.
   ///
   /// A rewrite in place can be read while it is half done, and the store reads the header to find
