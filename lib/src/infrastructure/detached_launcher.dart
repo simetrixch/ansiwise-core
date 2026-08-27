@@ -17,18 +17,35 @@ import '../model/names.dart';
 /// the same on any machine this could run on. What it does not give is a unit to inspect or stop
 /// from outside — stopping a run is its own operation and is not built yet.
 final class DetachedLauncher implements RunLauncher {
-  /// Starts runs by invoking [executable] again, in [workingDirectory].
+  /// Starts runs by invoking [executable] again, in [workingDirectory], placed by [placement].
   const DetachedLauncher({
     required this.executable,
     required this.workingDirectory,
     required this.newRunId,
+    this.placement = const <String>[],
   });
 
   /// The binary to start, which is this one.
   final String executable;
 
-  /// Where the child runs, so it finds the same programs and writes to the same record directory.
+  /// Where the child runs.
   final String workingDirectory;
+
+  /// The options that put the child where THIS process stands: where the programs are, which file
+  /// names the active plugins, where records are kept.
+  ///
+  /// **[workingDirectory] WAS BELIEVED TO BE ENOUGH, AND IT IS NOT.** Every one of those has a
+  /// default relative to the working directory, so a parent started with the defaults and a child
+  /// inheriting only the directory do resolve the same three things — and a parent TOLD any of them
+  /// resolves something the child then cannot. Measured: a surface started as
+  /// `cd <catalogue> && ansiwise-rest serve --programs <catalogue>/ansiwise/programs` served the
+  /// catalogue happily, accepted a run, and the child exited 66 with "there are no programs at
+  /// \"programs\"" before writing a header — so the caller held a run id whose run answered 404 for
+  /// ever, and every diagnosis had to start from an absence.
+  ///
+  /// Passed through verbatim rather than recomposed from parsed values: what the child must be told
+  /// is what this process WAS told, and a second composition is a second thing to keep in step.
+  final List<String> placement;
 
   /// What names a run.
   ///
@@ -66,6 +83,9 @@ final class DetachedLauncher implements RunLauncher {
       executable,
       <String>[
         program.value,
+        // FIRST, so a reading of the process listing says where this run stands before it says what
+        // it is doing.
+        ...placement,
         '--mode',
         mode.flag,
         '--run',
