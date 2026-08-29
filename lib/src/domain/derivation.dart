@@ -2,6 +2,8 @@ library;
 
 import 'package:meta/meta.dart';
 
+import '../model/names.dart';
+
 /// The rules by which one answer is worked out from another, as a CLOSED set of names.
 ///
 /// **Why this exists at all.** Some values an installation needs are not questions anybody should be
@@ -62,7 +64,24 @@ enum DerivationRule {
   ///
   /// The other direction, written out rather than reached by a negation somewhere else, for the
   /// reason the conditions of a program are two names rather than one and a `not:`.
-  differsFrom('differs_from', _differsFrom, sources: 2);
+  differsFrom('differs_from', _differsFrom, sources: 2),
+
+  /// The first part of a role that names several joined by `+` — `master+slave` gives `master`.
+  ///
+  /// A machine doing several jobs at once carries them as ONE role value ([Role]), and what admits
+  /// workloads per part reads one part per slot — so a selection stamped from a combined role
+  /// takes it apart here instead of a program file computing on it. A value with no `+` in it is
+  /// its own first part and comes back unchanged; whether the source is a role at all is its
+  /// declaration's question and not this one's.
+  firstPart('first_part_of', _firstPart),
+
+  /// The last part of such a role — `master+slave` gives `slave`, and a value with no `+` comes
+  /// back unchanged.
+  ///
+  /// The other slot of the same selection. Unlike the first part, the last is always a SINGLE
+  /// part, so the pair covers a two-part union whole — a union of three parts would need a third
+  /// slot wherever this pair is read, and that reading is the reader's to declare.
+  lastPart('last_part_of', _lastPart);
 
   /// Declares a rule under the name a program file writes.
   const DerivationRule(this.written, this._apply, {this.sources = 1});
@@ -106,6 +125,10 @@ String _sameAs(String source, String other) => '${source == other}';
 String _differsFrom(String source, String other) => '${source != other}';
 
 String _firstDnsLabel(String source, String _) => source.split('.').first;
+
+String _firstPart(String source, String _) => Role(source).parts.first.value;
+
+String _lastPart(String source, String _) => Role(source).parts.last.value;
 
 String _withoutFirstDnsLabel(String source, String _) {
   final int dot = source.indexOf('.');

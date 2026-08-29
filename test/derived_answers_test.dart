@@ -39,6 +39,25 @@ void main() {
       expect(DerivationRule.withoutFirstDnsLabel.applyTo('s1.a.b.example.com'), 'a.b.example.com');
     });
 
+    test('a combined role splits into its first and its last part', () {
+      // A machine doing several jobs at once carries them as ONE role value, and the selection
+      // that admits workloads per part reads one part per slot — this pair is those two slots.
+      expect(DerivationRule.firstPart.applyTo('master+slave'), 'master');
+      expect(DerivationRule.lastPart.applyTo('master+slave'), 'slave');
+    });
+
+    test('a single-part role is its own first and last part, and is not refused', () {
+      // Whether the source is a role at all is its declaration's question, exactly as with the
+      // DNS rules above — a refusal here would put one judgement in two places.
+      expect(DerivationRule.firstPart.applyTo('master'), 'master');
+      expect(DerivationRule.lastPart.applyTo('slave'), 'slave');
+    });
+
+    test('the part rules are looked up by the names a program file writes', () {
+      expect(DerivationRule.named('first_part_of'), DerivationRule.firstPart);
+      expect(DerivationRule.named('last_part_of'), DerivationRule.lastPart);
+    });
+
     test('a rule is looked up by the name a program file writes, and an unknown one is null', () {
       // Null rather than a throw, because the LOADER asks this in order to refuse a file naming a
       // rule that does not exist — and that refusal reads better than a stack trace.

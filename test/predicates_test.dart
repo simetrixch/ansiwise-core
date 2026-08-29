@@ -104,6 +104,20 @@ void main() {
     },
   );
 
+  test('a role that carries several parts is admitted where any one of them applies', () async {
+    // The machine IS each of its parts: a program declared for `master` runs against a machine
+    // whose role is `master+slave`, because that machine is a master — beside being a slave.
+    // Refused instead, the one machine doing both jobs could run nothing declared for either.
+    final Harness h = Harness();
+    final RunRecord record = await h.runner.run(
+      program: programGuardedBy(holds: true, because: 'x'),
+      mode: Mode.run,
+      header: h.header(role: 'master+slave'),
+    );
+    expect(record.exitCode, 0);
+    expect(h.files.written, isNot(isEmpty));
+  });
+
   group('a condition that cannot be answered', () {
     // The THIRD outcome. Both cases of PredicateResult assert something about the machine, so a
     // condition that could not read its input has to leave the run rather than pick one — answering

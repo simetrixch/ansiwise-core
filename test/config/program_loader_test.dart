@@ -41,6 +41,10 @@ steps:
         'configure_public_source_routing',
       ]);
       expect(program.appliesTo(const Role('slave')), isTrue);
+      // The union role: a machine doing both jobs is each of them, so a program declared for
+      // either part applies to it — and a role sharing no part still does not.
+      expect(program.appliesTo(const Role('master+slave')), isTrue);
+      expect(program.appliesTo(const Role('workstation')), isFalse);
     });
 
     test('reads the failure policy of every entry, and there is no default to fall back on', () {

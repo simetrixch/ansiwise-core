@@ -48,7 +48,15 @@ extension type const ProgramName(String value) implements Object {
 extension type const RunId(String value) implements Object {}
 
 /// The name of one machine role a program may apply to.
-extension type const Role(String value) implements Object {}
+///
+/// A machine that does several jobs at once carries a role that names them ALL, joined by `+` —
+/// one machine that is both master and slave writes `master+slave`. The union is one value
+/// everywhere a role travels (the header, the record, a refusal); [parts] is how a reader that
+/// decides per part takes it apart, and a role with no `+` in it is its own single part.
+extension type const Role(String value) implements Object {
+  /// The parts this role carries, in the order the value writes them.
+  List<Role> get parts => <Role>[for (final String part in value.split('+')) Role(part)];
+}
 
 /// A deployment stage.
 extension type const Stage(String value) implements Object {}

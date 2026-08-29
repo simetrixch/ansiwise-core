@@ -64,7 +64,12 @@ final class Program {
   final Arguments defaults;
 
   /// Whether this program may be run against a machine of [role].
-  bool appliesTo(Role role) => roles.contains(role);
+  ///
+  /// A role that carries several parts applies where ANY of its parts does: a machine whose role
+  /// is a union of two jobs IS each of them, so a program declared for either one runs against it.
+  /// The exact-membership half stays first, so a program that deliberately names a union in
+  /// `roles:` — applying only to a machine that does both jobs — still matches it whole.
+  bool appliesTo(Role role) => roles.contains(role) || role.parts.any(roles.contains);
 }
 
 /// One entry in a program: which step, with what, when, and what a failure costs.
