@@ -4,6 +4,7 @@ import '../model/failures.dart';
 import 'argument_check.dart';
 import 'arguments.dart';
 import 'derivation.dart';
+import 'files.dart';
 
 /// What a program has to be told before it can run, declared by the program and nothing else.
 ///
@@ -37,6 +38,17 @@ final class DeclaredAnswers {
   List<String> get secretNames => <String>[
     for (final ArgumentSpec spec in specs)
       if (spec.secret) spec.name,
+  ];
+
+  /// The names of the answers whose value is the secret in a file on the machine the program runs
+  /// on, in the order the program file declared them.
+  ///
+  /// A part of [secretNames], and the part a door cannot hand to a run's redactor: the value does
+  /// not exist where the answers are taken in, so there is nothing there to hide. The run reads it
+  /// and registers it itself, before its first step.
+  List<String> get secretNamesInFiles => <String>[
+    for (final ArgumentSpec spec in specs)
+      if (spec.derivation?.rule.readsAFile ?? false) spec.name,
   ];
 
   /// The declaration named [name], or null.
@@ -232,6 +244,15 @@ final class DeclaredAnswers {
         );
         continue;
       }
+      // A RULE THAT READS A FILE IS CHECKED HERE AND FILLED LATER. Everything above is about the
+      // DECLARATION — that the source exists, holds text and is not itself worked out — and a
+      // program that gets any of it wrong is refused at the same moment as every other, before
+      // there is a run to refuse. What cannot happen here is the reading: the file is on the
+      // machine the program acts on, and this runs wherever the answers were taken in.
+      // `withSecretsReadFromFiles` is where the value arrives.
+      if (how.rule.readsAFile) {
+        continue;
+      }
       worked[spec.name] = how.rule.applyTo(value);
     }
 
@@ -239,6 +260,81 @@ final class DeclaredAnswers {
       throw AnswersRejected(problems.join('\n'));
     }
     return answered.withDefaults(worked);
+  }
+
+  /// [answered] with every answer that is the secret in a file filled from that file, read through
+  /// [files].
+  ///
+  /// **This is the second of the two moments an answer is worked out, and the only one that needs a
+  /// machine.** [validate] does the rest — the defaults, the fallbacks and every rule whose value is
+  /// in text the run already holds — and it runs at the door, which may be somewhere else entirely.
+  /// This runs inside the run, before its first step, so the file it reads is the one on the machine
+  /// the program is about to act on.
+  ///
+  /// **A file that is not there, cannot be read, or holds nothing but whitespace is a REFUSAL naming
+  /// the path.** Never an empty answer and never a default: an answer worked out this way stands for
+  /// a credential, and a run carrying an empty one in its place would take a step's own refusal — or
+  /// worse, a wait for a person nobody is — instead of stopping where the reason is still legible.
+  /// Every unreadable path is named at once, the way every other problem with a program's answers is.
+  ///
+  /// **Whitespace around the value is taken off.** A credential written to a file ends with a
+  /// newline, and what hides a secret from a record replaces the exact text it was given — so a
+  /// value carrying the newline would be hidden nowhere it is used without one.
+  ///
+  /// A program declaring no such answer never touches [files] and comes back with what it was given.
+  ///
+  /// Throws [AnswersRejected], the same failure [validate] throws, so a caller that already reports
+  /// one reports this without learning a second name for the same thing.
+  Future<Arguments> withSecretsReadFromFiles(
+    Arguments answered, {
+    required Files files,
+    required String program,
+  }) async {
+    final List<String> problems = <String>[];
+    final Map<String, Object> read = <String, Object>{};
+
+    for (final ArgumentSpec spec in specs) {
+      final Derivation? how = spec.derivation;
+      if (how == null || !how.rule.readsAFile) {
+        continue;
+      }
+      final Object? path = answered.raw(how.from);
+      if (path is! String || path.isEmpty) {
+        problems.add(
+          '$program: "${spec.name}" is the secret in the file "${how.from}" names, and this run '
+          'holds no path under that name',
+        );
+        continue;
+      }
+      final String held;
+      try {
+        held = (await files.read(path)).trim();
+      } on Object catch (unreadable) {
+        // WITHOUT WHAT WAS THROWN, because a port is free to put what it read in the message and
+        // this is the one value that must not travel. The path is what an operator acts on, and it
+        // is theirs already — they wrote the answer it came from.
+        problems.add(
+          '$program: "${spec.name}" is the secret in the file at $path, and that file cannot be '
+          'read — is it there, and may the account this run started as read it? '
+          '(${unreadable.runtimeType})',
+        );
+        continue;
+      }
+      if (held.isEmpty) {
+        problems.add(
+          '$program: "${spec.name}" is the secret in the file at $path, and that file holds nothing '
+          'but whitespace — an empty credential is not a credential, and standing one in would move '
+          'the failure to a step that cannot say why',
+        );
+        continue;
+      }
+      read[spec.name] = held;
+    }
+
+    if (problems.isNotEmpty) {
+      throw AnswersRejected(problems.join('\n'));
+    }
+    return answered.withDefaults(read);
   }
 }
 

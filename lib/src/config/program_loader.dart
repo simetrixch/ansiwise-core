@@ -331,10 +331,43 @@ DeclaredAnswers _answers(YamlMap document, _Refusals refusals) {
         refusals.add(line, '"$name" holds ${resolved.name}, and only text is worked out from text');
         continue;
       }
+      // THE RULE IS READ FIRST, because what may stand beside it depends on which rule it is. One
+      // that reads a file off the machine yields a secret, and a refusal written without knowing
+      // that would tell the reader the opposite of the truth about their own declaration.
+      if (derivedNode is! String || DerivationRule.named(derivedNode) == null) {
+        refusals.add(
+          line,
+          '"$name": "derived" is "$derivedNode", and it is one of '
+          '${DerivationRule.allWritten.join(', ')}',
+        );
+        continue;
+      }
+      final DerivationRule rule = DerivationRule.named(derivedNode)!;
       if (isSecret == true) {
-        // A value that follows from another is not a secret of its own, and calling it one would
-        // put the answer it came from one rule away from a redacted record while it stayed plain.
-        refusals.add(line, '"$name" is worked out from another answer, so it is not a secret');
+        refusals.add(
+          line,
+          rule.readsAFile
+              // The rule already says it, and the declaration saying it again is a second place the
+              // same fact could come to disagree with the first.
+              ? '"$name" is the secret in a file on this machine, which "$derivedNode" says already '
+                    '— "secret" here is that same fact written twice'
+              // A value that follows from another is not a secret of its own, and calling it one
+              // would put the answer it came from one rule away from a redacted record while it
+              // stayed plain.
+              : '"$name" is worked out from another answer, so it is not a secret',
+        );
+        continue;
+      }
+      if (fallback != null) {
+        // A default stands in wherever nobody supplied a value, and nobody ever supplies a derived
+        // answer — so the default would win over the rule on every run and the rule would never be
+        // read. Where the value is a credential that is the whole defect in one line: a literal in
+        // a file that ships to every installation, standing in for what the machine holds.
+        refusals.add(
+          line,
+          '"$name" is worked out from another answer, so a "default" would stand in its place on '
+          'every run and the rule would never be read',
+        );
         continue;
       }
       if (isRequired == true) {
@@ -345,19 +378,10 @@ DeclaredAnswers _answers(YamlMap document, _Refusals refusals) {
         );
         continue;
       }
-      if (derivedNode is! String || DerivationRule.named(derivedNode) == null) {
-        refusals.add(
-          line,
-          '"$name": "derived" is "$derivedNode", and it is one of '
-          '${DerivationRule.allWritten.join(', ')}',
-        );
-        continue;
-      }
       if (fromNode is! String || fromNode.isEmpty) {
         refusals.add(line, '"$name": "from" is the name of the answer this one is worked out from');
         continue;
       }
-      final DerivationRule rule = DerivationRule.named(derivedNode)!;
       if (rule.sources == 2 && (andNode is! String || andNode.isEmpty)) {
         refusals.add(
           line,

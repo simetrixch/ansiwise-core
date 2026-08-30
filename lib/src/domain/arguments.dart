@@ -181,7 +181,7 @@ final class ArgumentSpec {
     required this.kind,
     required this.describes,
     this.required = true,
-    this.secret = false,
+    bool secret = false,
     this.defaultValue,
     this.allowed = const <String>[],
     this.shape,
@@ -189,7 +189,7 @@ final class ArgumentSpec {
     this.statedWhen,
     this.derivation,
     this.defaultFrom,
-  });
+  }) : _declaredSecret = secret;
 
   /// The key a program file writes.
   final String name;
@@ -203,12 +203,21 @@ final class ArgumentSpec {
   /// Whether a program must give it.
   final bool required;
 
+  final bool _declaredSecret;
+
   /// Whether the value is a credential or a key.
   ///
   /// Two things follow from it and neither is optional. The client shows a field that does not echo
   /// what is typed, and the value is never sent back out — a description of a program tells a reader
   /// that a secret is set, never what it is.
-  final bool secret;
+  ///
+  /// **It is answered by the DECLARATION and by the rule together**, so that every reader of this
+  /// one property is right about both. Whoever declares the answer says it; and an answer worked
+  /// out by a rule that reads a file off the machine is one whatever the declaration says, because
+  /// the value was never typed and a record is a file every account on the machine may read. Asked
+  /// of the declaration alone, one program file forgetting the word would put a credential in the
+  /// clear in a run record, in a log line, and in the description a client is given.
+  bool get secret => _declaredSecret || (derivation?.rule.readsAFile ?? false);
 
   /// What it is when a program does not give it.
   final Object? defaultValue;

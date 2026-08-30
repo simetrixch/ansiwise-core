@@ -746,6 +746,38 @@ final class WritesAndItsUndoThrows extends ReversibleStep<String?> with FileStep
   }
 }
 
+/// A step that reads one answer by name and writes what it holds into the record.
+///
+/// The shape of every step that carries a value the run was given: it reads the answer its row
+/// names, and the value reaches the record through an ordinary surface. Which answer is the row's
+/// word, so one step stands in for a credential and for a value nobody hides alike — which is what
+/// makes it usable as the innocent neighbour of its own test.
+final class SaysAnAnswer extends ObservingStep {
+  /// Says whatever the answer called [answer] holds.
+  const SaysAnAnswer(this.answer);
+
+  /// Builds the step from what the program gave it.
+  factory SaysAnAnswer.fromArguments(Arguments arguments) => SaysAnAnswer(arguments.text('answer'));
+
+  /// What this step accepts.
+  static const List<ArgumentSpec> arguments = <ArgumentSpec>[
+    ArgumentSpec(
+      name: 'answer',
+      kind: ArgumentKind.answerName,
+      describes: 'the name of the answer whose value it writes into the record',
+    ),
+  ];
+
+  /// The name of the answer it says.
+  final String answer;
+
+  @override
+  Future<CheckResult> check(StepContext context) async {
+    context.log.info('the answer holds ${context.answers.text(answer)}');
+    return const CheckResult.satisfied('the answer was read');
+  }
+}
+
 /// A step that mints a credential while the run happens and publishes it.
 ///
 /// The shape mechanism 3 exists for: the value is in no answer, in no program file and in nothing

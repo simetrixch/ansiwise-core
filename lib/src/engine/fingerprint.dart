@@ -40,6 +40,15 @@ import '../domain/resolved_program.dart';
 /// What is deliberately NOT in it: the time, the run's own id, and the machine's own name. Those
 /// differ between any two runs, and including them would mean no dry run ever satisfied the gate.
 ///
+/// **Nor is the value of an answer that is the secret in a FILE on the machine**, and for the same
+/// reason a measured argument's value is not here: it does not exist when this is computed. The
+/// answer that names the PATH is an ordinary answer and IS in the material, so the wiring is
+/// covered and a program pointed at another file cannot hash like this one. What a dry run
+/// therefore proves about such an answer is that the file was there and readable, not that the real
+/// run will read the same text out of it. Putting the value in would have cost more than it bought:
+/// a credential minted again between the dry run and the real one would leave the real run refused
+/// by the gate for ever, with no retry able to clear it.
+///
 /// **A value cannot forge a field.** Every part is written with its length in front of it, so a
 /// value carrying a newline is one value and not the start of another. Written as plain lines, a
 /// step declaring text `a` and text `b` would fingerprint `a: "1\nb=2"` exactly like `a: "1"` with

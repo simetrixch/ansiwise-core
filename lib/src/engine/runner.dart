@@ -21,9 +21,10 @@ import 'unwind.dart';
 
 /// Runs a program against a machine, in one of the three modes, and produces its record.
 ///
-/// It does four things and delegates the rest: it refuses a program that does not apply to this
-/// machine, it has the conditions measured once, it walks the steps applying the failure policy
-/// each one declared, and when a step ends the run it has what was already done taken back.
+/// It does five things and delegates the rest: it refuses a program that does not apply to this
+/// machine, it fills the one kind of answer that could only be read here, it has the conditions
+/// measured once, it walks the steps applying the failure policy each one declared, and when a step
+/// ends the run it has what was already done taken back.
 ///
 /// What it never does is decide what a step means. A verdict comes from the step's own checked
 /// postcondition, and what a failure costs comes from the program file. Both of those live outside
@@ -74,6 +75,11 @@ final class Runner {
   /// could have typed at the start is worse than a refusal. A program that declares nothing is run
   /// with [Arguments.none], which is what a step reading no answer sees.
   ///
+  /// One kind of answer is NOT in it and is filled here: the secret standing in a file on this
+  /// machine. Nobody supplies it and no door could have read it, so this run reads it before its
+  /// first step and registers it with [redactor]. A file that is missing, unreadable or empty ends
+  /// the run at the top, with the path in the record's one issue.
+  ///
   /// Returns the completed record. Throws [RoleMismatch] when the program does not apply to this
   /// machine — before anything is measured, because measuring a machine a program will not run
   /// against is work with no reader.
@@ -97,8 +103,29 @@ final class Runner {
             RunStarted(sequence: sequence, at: at, program: program.declared.name, mode: mode.flag),
       );
 
-      final Facts facts = await _measure(program, answers);
-      final _Walk walk = await _walkSteps(program, mode, facts, answers);
+      // THE ONE ANSWER THAT COULD NOT BE FILLED AT THE DOOR. An answer worked out by a rule that
+      // reads a file is the secret standing in a file on THIS machine, and whoever took the answers
+      // in may have been another one — so it is filled here, before the first step, and a file that
+      // is missing or unreadable ends the run at the top with the path named.
+      //
+      // Read through the machine's own file port rather than a recording one. A read is not
+      // recorded either way; what a recording port would add is a step to attribute it to, and
+      // there is no step — this is the run itself.
+      final Arguments held = await program.declared.answers.withSecretsReadFromFiles(
+        answers,
+        files: machine.files,
+        program: program.declared.name.value,
+      );
+      // Registered the moment the value exists, which is what hides it everywhere: the shell, the
+      // http port, the logger and the file the record is written to all hold this same object. The
+      // secrets an operator supplied were given to it where the run was started; this one was in
+      // nothing anybody could give it.
+      for (final String name in program.declared.answers.secretNamesInFiles) {
+        redactor.register(held.text(name));
+      }
+
+      final Facts facts = await _measure(program, held);
+      final _Walk walk = await _walkSteps(program, mode, facts, held);
 
       // What the run applied and did not take back. Empty for a run that changed nothing and for
       // one whose unwind reached the beginning; not empty means the machine is in a state nothing
@@ -114,7 +141,7 @@ final class Runner {
             recorder: recorder,
             redactor: redactor,
             logLevel: logLevel,
-          ).undo(walk.applied, facts, answers);
+          ).undo(walk.applied, facts, held);
         } else {
           leftStanding = <String>[
             for (final AppliedStep applied in walk.applied) applied.name.value,

@@ -130,6 +130,112 @@ void main() {
       );
     });
 
+    test('reads an answer that is the secret in a file, and calls it secret unasked', () {
+      // The whole point of the rule saying it rather than the file: an answer worked out from a
+      // file on the machine holds a value nobody typed, and one program file forgetting the word
+      // would be one word between a credential and a record every account may read.
+      final Program program = load(
+        '${head}answers:\n'
+        '  - name: key_file\n    kind: text\n    describes: where the credential stands\n'
+        '  - name: auth_key\n    kind: text\n    required: false\n'
+        '    derived: secret_in_file_at\n    from: key_file\n'
+        '    describes: the credential the earlier run left in that file\n',
+      );
+
+      expect(program.answers.specs.last.derivation?.rule, DerivationRule.secretInFileAt);
+      expect(program.answers.secretNames, <String>['auth_key']);
+      expect(program.answers.secretNamesInFiles, <String>['auth_key']);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: an answer worked out from TEXT is not called secret', () {
+      // Without this, a version that called every derived answer secret would satisfy the test
+      // above and turn ordinary worked-out values into markers all through a record.
+      final Program program = load(
+        '${head}answers:\n'
+        '  - name: fqdn\n    kind: text\n    describes: the domain\n'
+        '  - name: cluster_name\n    kind: text\n    required: false\n'
+        '    derived: first_dns_label_of\n    from: fqdn\n    describes: the short name\n',
+      );
+
+      expect(program.answers.secretNames, isEmpty);
+      expect(program.answers.secretNamesInFiles, isEmpty);
+    });
+
+    test(
+      'THE PLANTED DEFECT: writing "secret" beside that rule is refused as the same fact twice',
+      () {
+        expect(
+          () => load(
+            '${head}answers:\n'
+            '  - name: key_file\n    kind: text\n    describes: where the credential stands\n'
+            '  - name: auth_key\n    kind: text\n    required: false\n    secret: true\n'
+            '    derived: secret_in_file_at\n    from: key_file\n    describes: the credential\n',
+          ),
+          throwsA(
+            isA<ProgramInvalid>().having(
+              (ProgramInvalid p) => p.message,
+              'message',
+              allOf(contains('is the secret in a file'), contains('written twice')),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('and writing it beside a rule that works out TEXT is refused in the other words', () {
+      // The two refusals say opposite things about the same key, and each has to be the one the
+      // reader of that declaration actually needs. Told "it is not a secret" about an answer that
+      // is one, they would take the word out and ship the credential in the clear.
+      expect(
+        () => load(
+          '${head}answers:\n'
+          '  - name: fqdn\n    kind: text\n    describes: the domain\n'
+          '  - name: cluster_name\n    kind: text\n    required: false\n    secret: true\n'
+          '    derived: first_dns_label_of\n    from: fqdn\n    describes: the short name\n',
+        ),
+        throwsA(
+          isA<ProgramInvalid>().having(
+            (ProgramInvalid p) => p.message,
+            'message',
+            contains('is worked out from another answer, so it is not a secret'),
+          ),
+        ),
+      );
+    });
+
+    test('THE PLANTED DEFECT: a "default" beside a rule is refused, because it would always win', () {
+      // Nobody supplies a derived answer, so a default stands in on every run and the rule is never
+      // read. Beside the rule that reads a credential off the machine, that is a literal in a file
+      // shipped to every installation standing where the machine's own value belongs.
+      expect(
+        () => load(
+          '${head}answers:\n'
+          '  - name: key_file\n    kind: text\n    describes: where the credential stands\n'
+          '  - name: auth_key\n    kind: text\n    required: false\n    default: nothing-real\n'
+          '    derived: secret_in_file_at\n    from: key_file\n    describes: the credential\n',
+        ),
+        throwsA(
+          isA<ProgramInvalid>().having(
+            (ProgramInvalid p) => p.message,
+            'message',
+            contains('the rule would never be read'),
+          ),
+        ),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a default on an answer nobody works out is still read', () {
+      // Without this, a version that refused every default would satisfy the test above and take
+      // every optional answer in every program file with it.
+      final Program program = load(
+        '${head}answers:\n'
+        '  - name: workers\n    kind: integer\n    required: false\n    default: 3\n'
+        '    describes: how many\n',
+      );
+
+      expect(program.answers.specs.single.defaultValue, 3);
+    });
+
     test('refuses two declarations under one name', () {
       expect(
         () => load(

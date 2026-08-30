@@ -133,6 +133,71 @@ void main() {
     });
   });
 
+  group('an answer that is the SECRET IN A FILE carries its PATH into the input, not its value', () {
+    // The one derived answer that is NOT in the material, and the trade is written out here so a
+    // reader meets it where they read what the gate covers. The value does not exist when this is
+    // computed — the file is on the machine and this may run at a door somewhere else — so what
+    // stands in for it is the answer naming the PATH, exactly as the WIRING stands in for a value
+    // measured while the run happens.
+    //
+    // What it costs: a dry run proves the file was there and readable, not that the real run will
+    // read the same text out of it. What it buys: a credential minted again between the two runs
+    // does not leave the real run refused by the gate for ever.
+    Program withSecretInAFile() => const Program(
+      name: ProgramName('p'),
+      roles: <Role>[Role('master')],
+      answers: DeclaredAnswers(<ArgumentSpec>[
+        ArgumentSpec(name: 'key_file', kind: ArgumentKind.text, describes: 'where it stands'),
+        ArgumentSpec(
+          name: 'auth_key',
+          kind: ArgumentKind.text,
+          describes: 'the credential in that file',
+          required: false,
+          derivation: Derivation(rule: DerivationRule.secretInFileAt, from: 'key_file'),
+        ),
+      ]),
+      steps: <ProgramStep>[
+        ProgramStep(
+          step: StepName('writes_a_file'),
+          onFailure: OnFailure.exit,
+          arguments: Arguments(<String, Object>{'path': '/one'}),
+        ),
+      ],
+    );
+
+    String forKeyFile(String keyFile) {
+      final Program program = withSecretInAFile();
+      return fingerprintOf(
+        program: ProgramResolver(registry()).resolve(program),
+        commit: 'abc',
+        answers: program.answers.validate(<String, Object?>{'key_file': keyFile}, program: 'p'),
+      );
+    }
+
+    test('two runs reading DIFFERENT files do not share a fingerprint', () {
+      // The wiring is covered: a program pointed at another file is another input, and a dry run of
+      // the one may not admit a real run of the other.
+      expect(forKeyFile('/tmp/one'), isNot(forKeyFile('/tmp/two')));
+    });
+
+    test('the same file twice gives the same fingerprint', () {
+      expect(forKeyFile('/tmp/one'), forKeyFile('/tmp/one'));
+    });
+
+    test('THE PLANTED DEFECT: what the file HELD is in no part of the material', () {
+      // The assertion that would go red if the value were ever worked into the answers here. It is
+      // written as the value's absence rather than as two hashes being equal, because two hashes
+      // built from the same absent value are equal for the uninteresting reason as well.
+      final Program program = withSecretInAFile();
+      final Arguments answers = program.answers.validate(<String, Object?>{
+        'key_file': '/tmp/one',
+      }, program: 'p');
+
+      expect(answers.names, isNot(contains('auth_key')));
+      expect(answers.text('key_file'), '/tmp/one');
+    });
+  });
+
   group("the operator's answers decide what a step does, so they are part of the input", () {
     test('two runs differing only in one answer do not share a fingerprint', () {
       // The scenario this closes: a dry run for one installation admitting a real run against

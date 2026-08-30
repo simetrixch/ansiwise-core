@@ -1,4 +1,5 @@
 import 'package:ansiwise_core/ansiwise_core.dart';
+import 'package:ansiwise_core/testing.dart';
 import 'package:test/test.dart';
 
 /// An answer worked out from another, before the first step and inside the fingerprint.
@@ -65,6 +66,45 @@ void main() {
       expect(DerivationRule.named('firstDnsLabel'), isNull);
       expect(DerivationRule.named('reverse'), isNull);
       expect(DerivationRule.allWritten.length, DerivationRule.values.length);
+    });
+
+    test('exactly one rule reads a file, and the rest work their value out of text', () {
+      // The property everything below turns on, asked of the whole set rather than of the one
+      // member: whichever rule a program names, it is filled at one of two moments and this is what
+      // says which. A second rule that came to read a file without the run being taught to fill it
+      // would be an answer nothing ever put a value under.
+      expect(
+        DerivationRule.values.where((DerivationRule rule) => rule.readsAFile),
+        <DerivationRule>[DerivationRule.secretInFileAt],
+      );
+      expect(DerivationRule.named('secret_in_file_at'), DerivationRule.secretInFileAt);
+    });
+
+    test('THE PLANTED DEFECT: the rule that reads a file works nothing out of text', () {
+      // Asked of it anyway, it must refuse rather than answer. Whatever it returned would be a
+      // value nobody read — the path itself, or an empty string — standing where a credential is
+      // supposed to be.
+      expect(
+        () => DerivationRule.secretInFileAt.applyTo('/tmp/a-key-file'),
+        throwsA(
+          isA<StateError>().having(
+            (StateError refused) => refused.message,
+            'message',
+            allOf(contains('secret_in_file_at'), contains('read off the machine')),
+          ),
+        ),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: every other rule still answers', () {
+      // Without this, a version that refused for every rule would satisfy the assertion above and
+      // take the whole mechanism with it.
+      for (final DerivationRule rule in DerivationRule.values) {
+        if (rule.readsAFile) {
+          continue;
+        }
+        expect(rule.applyTo('m1.example.com', 'm1.example.com'), isNotEmpty, reason: rule.written);
+      }
     });
   });
 
@@ -429,4 +469,214 @@ void main() {
       );
     });
   });
+
+  group('an answer that is the SECRET IN A FILE on this machine', () {
+    // The case the other rules cannot serve: a credential that exists on the machine and in no
+    // place a person could type it, because an earlier run minted it there. It is worked out from
+    // the answer holding the PATH, and the value is what the file says.
+    const String path = '/tmp/a-staged-credential';
+    const String credential = 'a-credential-nobody-typed';
+
+    DeclaredAnswers program() => DeclaredAnswers(<ArgumentSpec>[
+      text('key_file'),
+      derived('auth_key', DerivationRule.secretInFileAt, 'key_file'),
+    ]);
+
+    Arguments answered() => program().validate(<String, Object?>{'key_file': path}, program: 'p');
+
+    test('validate leaves it ABSENT, because the file is not where the answers are taken in', () {
+      // The half that makes the two moments real. Whoever took the answers in may be another
+      // machine entirely, so there is nothing for it to read — and an answer filled with something
+      // else here would be a value nobody read standing where a credential belongs.
+      final Arguments answers = answered();
+
+      expect(answers.text('key_file'), path);
+      expect(answers.names, isNot(contains('auth_key')));
+    });
+
+    test('the run fills it from the file, with the newline taken off', () async {
+      // The newline matters and is not cosmetic: what hides a secret from a record replaces the
+      // exact text it was given, so a value carrying one would be hidden nowhere it is used
+      // without one.
+      final FakeFiles files = FakeFiles(<String, String>{path: '$credential\n'});
+
+      final Arguments held = await program().withSecretsReadFromFiles(
+        answered(),
+        files: files,
+        program: 'p',
+      );
+
+      expect(held.text('auth_key'), credential);
+      expect(held.text('key_file'), path, reason: 'the answer it was worked out from still stands');
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a program declaring no such answer is untouched', () {
+      // Without this, a version that filled every answer from a file — or that refused whenever a
+      // program declared none — would pass every assertion above.
+      final DeclaredAnswers plain = DeclaredAnswers(<ArgumentSpec>[
+        text('fqdn'),
+        derived('cluster_name', DerivationRule.firstDnsLabel, 'fqdn'),
+      ]);
+      final Arguments answers = plain.validate(<String, Object?>{
+        'fqdn': 'm1.example.com',
+      }, program: 'p');
+
+      expect(plain.secretNamesInFiles, isEmpty);
+      expect(
+        plain.withSecretsReadFromFiles(answers, files: _RefusesToRead(), program: 'p'),
+        completion(
+          isA<Arguments>().having((Arguments a) => a.text('cluster_name'), 'cluster_name', 'm1'),
+        ),
+        reason: 'a program with no such answer never reaches for the file port at all',
+      );
+    });
+
+    test('THE PLANTED DEFECT: a file that is not there is a refusal naming the path', () async {
+      await expectLater(
+        program().withSecretsReadFromFiles(answered(), files: FakeFiles(), program: 'p'),
+        throwsA(
+          isA<AnswersRejected>().having(
+            (AnswersRejected refused) => refused.message,
+            'message',
+            allOf(contains('auth_key'), contains(path), contains('cannot be read')),
+          ),
+        ),
+      );
+    });
+
+    test('a file that cannot be read for ANOTHER reason is the same refusal', () async {
+      // The probe is not tied to one exception class on purpose. The fake in-memory file system
+      // throws a StateError for a path it does not hold; a real one refuses a file belonging to
+      // another account with something else entirely, and a check written against one of them
+      // proves nothing about the other.
+      await expectLater(
+        program().withSecretsReadFromFiles(answered(), files: _RefusesToRead(), program: 'p'),
+        throwsA(
+          isA<AnswersRejected>().having(
+            (AnswersRejected refused) => refused.message,
+            'message',
+            allOf(contains(path), contains('cannot be read')),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'THE PLANTED DEFECT: a file holding only whitespace is refused, not read as empty',
+      () async {
+        // The shape a fallback would hide. An empty credential moves the failure to a step that
+        // cannot say why it failed — or, worse, to a wait for a person this run does not have.
+        await expectLater(
+          program().withSecretsReadFromFiles(
+            answered(),
+            files: FakeFiles(<String, String>{path: '  \n'}),
+            program: 'p',
+          ),
+          throwsA(
+            isA<AnswersRejected>().having(
+              (AnswersRejected refused) => refused.message,
+              'message',
+              allOf(contains(path), contains('whitespace')),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('a run holding no path under the name it reads is refused, naming both', () async {
+      // The state a caller reaches by filling before it validates. Validation refuses an unanswered
+      // source of its own, so this is the second door on the same hole — and it is worth having,
+      // because the alternative is reading the empty string as a path and refusing about a file
+      // called nothing.
+      await expectLater(
+        program().withSecretsReadFromFiles(
+          const Arguments(<String, Object>{}),
+          files: FakeFiles(),
+          program: 'p',
+        ),
+        throwsA(
+          isA<AnswersRejected>().having(
+            (AnswersRejected refused) => refused.message,
+            'message',
+            allOf(contains('auth_key'), contains('key_file')),
+          ),
+        ),
+      );
+    });
+
+    test('the DECLARATION is still checked where the answers are taken in', () {
+      // The reading moves; the refusals do not. A program naming a source it never declared is
+      // refused before there is a run to refuse, exactly as it is for every other rule.
+      final DeclaredAnswers nowhere = DeclaredAnswers(<ArgumentSpec>[
+        derived('auth_key', DerivationRule.secretInFileAt, 'nowhere'),
+      ]);
+
+      expect(
+        () => nowhere.validate(const <String, Object?>{}, program: 'p'),
+        throwsA(
+          isA<AnswersRejected>().having(
+            (AnswersRejected refused) => refused.message,
+            'message',
+            allOf(contains('auth_key'), contains('nowhere')),
+          ),
+        ),
+      );
+    });
+
+    test('it is a SECRET although nothing in the declaration says so', () {
+      // The property a program file may not leave out, because leaving it out is one word between
+      // a credential and a record every account on the machine may read.
+      final ArgumentSpec spec = program().specs.last;
+
+      expect(spec.secret, isTrue);
+      expect(program().secretNames, contains('auth_key'));
+      expect(program().secretNamesInFiles, <String>['auth_key']);
+    });
+
+    test('THE INNOCENT NEIGHBOUR: an answer worked out from TEXT is not secret', () {
+      // Without this, a version that called every derived answer secret would pass the assertion
+      // above and turn ordinary values into markers all through the record.
+      final DeclaredAnswers plain = DeclaredAnswers(<ArgumentSpec>[
+        text('fqdn'),
+        derived('cluster_name', DerivationRule.firstDnsLabel, 'fqdn'),
+      ]);
+
+      expect(plain.specs.last.secret, isFalse);
+      expect(plain.secretNames, isEmpty);
+    });
+  });
+}
+
+/// A file port that refuses every read with something other than the in-memory fake's own failure.
+///
+/// A real machine refuses a file belonging to another account with a failure of its own kind, so a
+/// probe that only ever planted the fake's StateError would prove the refusal against one exception
+/// class and say nothing about the one an operator actually meets.
+final class _RefusesToRead implements Files {
+  @override
+  Future<bool> exists(String path, {bool elevated = false}) async => true;
+
+  @override
+  Future<String> read(String path, {bool elevated = false}) async =>
+      throw const FormatException('this port refuses every read');
+
+  @override
+  Future<void> write(
+    String path,
+    String content, {
+    required int mode,
+    bool elevated = false,
+  }) async => throw StateError('nothing here writes');
+
+  @override
+  Future<void> delete(String path, {bool elevated = false}) async =>
+      throw StateError('nothing here deletes');
+
+  @override
+  Future<void> createDirectory(String path, {required int mode, bool elevated = false}) async =>
+      throw StateError('nothing here creates a directory');
+
+  @override
+  Future<List<String>> list(String path, {bool elevated = false}) async =>
+      throw StateError('nothing here lists');
 }

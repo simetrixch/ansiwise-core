@@ -23,6 +23,13 @@ import '../model/names.dart';
 /// step runs. A value worked out here is part of it. A value worked out later would not be, and a
 /// real run would then be admitted against a dry run that had used different values.
 ///
+/// **One rule is filled by the RUN instead, and it says so on itself.**
+/// [DerivationRule.secretInFileAt] reads a file on the machine the program acts on, and the door
+/// that takes the answers in can be another machine entirely — so there is no value to put in the
+/// material when the fingerprint is computed. What stands in its place is the answer that names the
+/// PATH, which is an ordinary answer and is in the material. That is the same trade a value measured
+/// while the run happens makes, and what it costs is written out on the rule.
+///
 /// Adding a rule is adding a member here, with its own test. It is deliberately a small act with a
 /// visible cost: a set nobody can extend from a program file is a set that cannot grow into a
 /// language by accident.
@@ -81,22 +88,78 @@ enum DerivationRule {
   /// The other slot of the same selection. Unlike the first part, the last is always a SINGLE
   /// part, so the pair covers a two-part union whole — a union of three parts would need a third
   /// slot wherever this pair is read, and that reading is the reader's to declare.
-  lastPart('last_part_of', _lastPart);
+  lastPart('last_part_of', _lastPart),
+
+  /// The secret in the file at the path another answer holds — what the file says, with the
+  /// whitespace around it taken off.
+  ///
+  /// For the value that exists on the machine and in no place a person could type it: a credential
+  /// an earlier run minted there and left in a file for this one. The answer this is worked out
+  /// from holds the PATH; what stands under this name is what the file holds. One slot, one file,
+  /// one value — there is no second path, no fallback and nothing composed.
+  ///
+  /// **It is filled by the RUN, not where the answers are taken in.** Every other rule works its
+  /// value out of text the run already carries, so it can be worked out anywhere; this one has to
+  /// be where the file is, and the door that took the answers in may be another machine. The
+  /// declared answers fill it — `withSecretsReadFromFiles` — before the first step, through the
+  /// file port of the machine the program acts on.
+  ///
+  /// **So the fingerprint carries the PATH and not the value**, exactly as it carries the wiring
+  /// and not the value of an argument measured while the run happens. What a dry run proves about
+  /// this answer is that the file was there and readable, and not that the real run will read the
+  /// same text out of it. The alternative was worse: with the value in the material, a credential
+  /// minted again between the two runs would leave the real run refused by the gate for ever, and
+  /// no retry could clear it.
+  ///
+  /// **The value is a SECRET, and a program file cannot say otherwise.** Nobody typed it, and a
+  /// record is a file every account on the machine may read; a credential that stays in the clear
+  /// because one word was left out of a declaration is not a credential. So an answer's own
+  /// declaration reports itself as secret when it is worked out this way, whatever the file says,
+  /// and the file writing `secret:` beside the rule is refused as a second place to disagree.
+  ///
+  /// The whitespace is taken off because a credential written to a file ends with a newline, and a
+  /// redactor replaces the exact text it was given: registered with the newline it would hide
+  /// nothing wherever the value is used without one. A file holding only whitespace is a REFUSAL
+  /// naming the path — never an empty answer, and never a default.
+  secretInFileAt('secret_in_file_at', null);
 
   /// Declares a rule under the name a program file writes.
+  ///
+  /// The second value is how the rule works its answer out of text, and it is null for a rule whose
+  /// value is not in any text this run holds — [readsAFile] is that question asked of a rule.
   const DerivationRule(this.written, this._apply, {this.sources = 1});
 
   /// The name a program file writes for this rule.
   final String written;
 
-  final String Function(String, String) _apply;
+  final String Function(String, String)? _apply;
 
   /// How many answers this rule reads: one, or a pair.
   final int sources;
 
+  /// Whether this rule's value is read off the machine rather than worked out from text the run
+  /// already holds.
+  ///
+  /// It is what tells the two moments apart: a rule that works a value out of text is applied where
+  /// the answers are validated, and one that reads a file is filled by the run itself, before its
+  /// first step.
+  bool get readsAFile => _apply == null;
+
   /// [source] under this rule.
   /// The value this rule works out. [other] is given exactly for the rules that read a pair.
-  String applyTo(String source, [String other = '']) => _apply(source, other);
+  ///
+  /// Refuses for a rule that [readsAFile]: its value is in no text, so anything answered here would
+  /// be a value nobody read.
+  String applyTo(String source, [String other = '']) {
+    final String Function(String, String)? worksOut = _apply;
+    if (worksOut == null) {
+      throw StateError(
+        '"$written" is read off the machine and works nothing out of text — the run fills an answer '
+        'worked out this way itself, before its first step',
+      );
+    }
+    return worksOut(source, other);
+  }
 
   /// The rule [written] names, or null when nothing here is called that.
   ///
