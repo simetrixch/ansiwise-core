@@ -129,6 +129,20 @@ final class RealFiles implements Files {
 
   @override
   Future<void> createDirectory(String path, {required int mode, bool elevated = false}) async {
+    // A DIRECTORY THAT IS ALREADY THERE IS NOT THIS CALL'S TO RE-PERMISSION. The mode belongs to
+    // what this call CREATES: a caller asking for a file under a path says how the directory it had
+    // to invent should stand, not how a directory the machine already keeps should stand.
+    //
+    // WHAT IT COST TO LEARN. Every step that writes a file goes through here (FileStep.apply makes
+    // the directory first, so no step has to), and a program rendering a scratch manifest to
+    // `/tmp/<name>.yaml` therefore asked for `/tmp` at the file's own mode. Unprivileged that is a
+    // refusal — `chmod returned 1, path = '/tmp'` — and a deployment stopped on it. Elevated it
+    // SUCCEEDS, and that is the worse half: `install -d -m 0755 /tmp` takes the sticky bit off the
+    // one directory on a machine that most needs it, so every account could then delete every other
+    // account's files there. Nothing would have reported it.
+    if (await _directoryThere(path, elevated: elevated)) {
+      return;
+    }
     if (elevated) {
       await _root(<String>[
         'install',
@@ -141,6 +155,15 @@ final class RealFiles implements Files {
     }
     await Directory(path).create(recursive: true);
     await setPermissions(path, mode);
+  }
+
+  /// Whether a DIRECTORY stands at [path] — `-d` and not `-e`, because a file standing where a
+  /// directory is wanted is not a directory this call may leave alone.
+  Future<bool> _directoryThere(String path, {required bool elevated}) async {
+    if (elevated) {
+      return (await _asRootOrRefuse(<String>['test', '-d', path], observes: true)).ok;
+    }
+    return Directory(path).exists();
   }
 
   @override
