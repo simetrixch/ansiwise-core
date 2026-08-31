@@ -105,23 +105,36 @@ final class Runner {
 
       // THE ONE ANSWER THAT COULD NOT BE FILLED AT THE DOOR. An answer worked out by a rule that
       // reads a file is the secret standing in a file on THIS machine, and whoever took the answers
-      // in may have been another one — so it is filled here, before the first step, and a file that
-      // is missing or unreadable ends the run at the top with the path named.
+      // in may have been another one — so it is filled here rather than there.
+      //
+      // A FILE THAT IS NOT THERE YET IS NOT A FAILURE HERE. The case this rule exists for is a
+      // machine that produces the value DURING the run — mints a credential, then spends it two
+      // rows later — so at the top the file is absent by construction. Refusing on that absence
+      // made the rule unable to serve the only case it was built for. It is read again before every
+      // step instead (see the walk), and what is still unreadable when the walk ends is named in
+      // the issues rather than swallowed.
       //
       // Read through the machine's own file port rather than a recording one. A read is not
       // recorded either way; what a recording port would add is a step to attribute it to, and
       // there is no step — this is the run itself.
-      final Arguments held = await program.declared.answers.withSecretsReadFromFiles(
-        answers,
-        files: machine.files,
-        program: program.declared.name.value,
-      );
+      Arguments held = answers;
+      try {
+        held = await program.declared.answers.withSecretsReadFromFiles(
+          answers,
+          files: machine.files,
+          program: program.declared.name.value,
+        );
+      } on AnswersRejected {
+        // Not yet, and that is ordinary: no step has run, so nothing has written anything.
+      }
       // Registered the moment the value exists, which is what hides it everywhere: the shell, the
       // http port, the logger and the file the record is written to all hold this same object. The
       // secrets an operator supplied were given to it where the run was started; this one was in
       // nothing anybody could give it.
       for (final String name in program.declared.answers.secretNamesInFiles) {
-        redactor.register(held.text(name));
+        if (held.has(name)) {
+          redactor.register(held.text(name));
+        }
       }
 
       final Facts facts = await _measure(program, held);
@@ -267,14 +280,40 @@ final class Runner {
     final List<AppliedStep> applied = <AppliedStep>[];
     final List<String> issues = <String>[];
 
+    // WHAT AN EARLIER ROW WROTE, READ BEFORE THE ROW THAT NEEDS IT. An answer worked out by a rule
+    // that reads a file stands for a value this machine produces during the run, so it is read again
+    // in front of every step: absent while nothing has written the file, and there from the step
+    // after the row that did. Registering it here is what hides it everywhere, because the same
+    // redactor is already held by the shell, the http port, the logger and the record's own file.
+    //
+    // The refusal is kept rather than thrown. A file still unreadable at this point is only a
+    // failure if a row actually needed it, and the row says so in its own words — so what is
+    // remembered here is added to the issues at the end, where it names the path an operator acts on.
+    Arguments held = answers;
+    String? unreadable;
     for (final ResolvedStep step in program.steps) {
+      try {
+        held = await program.declared.answers.withSecretsReadFromFiles(
+          held,
+          files: machine.files,
+          program: program.declared.name.value,
+        );
+        unreadable = null;
+        for (final String name in program.declared.answers.secretNamesInFiles) {
+          if (held.has(name)) {
+            redactor.register(held.text(name));
+          }
+        }
+      } on AnswersRejected catch (notYet) {
+        unreadable = notYet.toString();
+      }
       final StepOutcome outcome;
       try {
         outcome = await execution.execute(
           resolved: step,
           mode: mode,
           facts: facts,
-          answers: answers,
+          answers: held,
           start: machine.clock.now(),
           measurements: measurements,
           applied: applied,
@@ -290,6 +329,11 @@ final class Runner {
         // throw go into the issues instead, which is the only place left that an operator reads —
         // the usual place, the last row of the record, is the one that could not be written.
         issues.add('${step.entry.step}: $thrown');
+        // A run that STOPPED and a file that was still unreadable belong in one message: the row
+        // says it has no answer, and this says where the value was to come from.
+        if (unreadable case final String why) {
+          issues.add(why);
+        }
         return _Walk(records: records, applied: applied, issues: issues, ended: true);
       }
       records.add(outcome.record);
@@ -299,6 +343,11 @@ final class Runner {
         issues.add('${step.entry.step}: ${failed.reason}');
       }
       if (!outcome.continues) {
+        // A run that STOPPED and a file that was still unreadable belong in one message: the row
+        // says it has no answer, and this says where the value was to come from.
+        if (unreadable case final String why) {
+          issues.add(why);
+        }
         return _Walk(records: records, applied: applied, issues: issues, ended: true);
       }
     }

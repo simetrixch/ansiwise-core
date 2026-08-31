@@ -268,8 +268,11 @@ final class DeclaredAnswers {
   /// **This is the second of the two moments an answer is worked out, and the only one that needs a
   /// machine.** [validate] does the rest — the defaults, the fallbacks and every rule whose value is
   /// in text the run already holds — and it runs at the door, which may be somewhere else entirely.
-  /// This runs inside the run, before its first step, so the file it reads is the one on the machine
-  /// the program is about to act on.
+  /// This runs inside the run, in front of EVERY step, so the file it reads is the one on the
+  /// machine the program is acting on — and so a value the run itself produces is there for the row
+  /// that needs it. A machine that mints a credential and spends it two rows later has no such file
+  /// when the run starts, which is the case this exists for; the caller treats a refusal before that
+  /// row as "not yet" and keeps it for the end.
   ///
   /// **A file that is not there, cannot be read, or holds nothing but whitespace is a REFUSAL naming
   /// the path.** Never an empty answer and never a default: an answer worked out this way stands for

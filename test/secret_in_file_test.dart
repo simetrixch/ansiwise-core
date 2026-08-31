@@ -27,8 +27,12 @@ void main() {
   Registry registry() => registryOf(
     steps: <String, (String, Step Function(Arguments))>{
       'says': ('test/support/example_steps.dart:1', SaysAnAnswer.fromArguments),
+      'writes': ('test/support/example_steps.dart:2', WritesWhatItWasGiven.fromArguments),
     },
-    arguments: <String, List<ArgumentSpec>>{'says': SaysAnAnswer.arguments},
+    arguments: <String, List<ArgumentSpec>>{
+      'says': SaysAnAnswer.arguments,
+      'writes': WritesWhatItWasGiven.arguments,
+    },
   );
 
   /// A program whose `auth_key` is the secret in the file `key_file` names.
@@ -178,19 +182,74 @@ void main() {
     expect(ran.lines.where((String line) => line.contains(credential)), isNotEmpty);
   });
 
-  test('THE PLANTED DEFECT: a file that is not there ends the run before its first step', () async {
-    // Not an empty answer and not a default. The run stops where the reason is still legible, with
-    // the path in the record's one issue — the alternative is a step refusing about a credential it
-    // was handed nothing for, three files away from the mistake.
-    final ({RunRecord closed, List<String> lines}) ran = await runAndRead(
-      readsItFromTheFile(),
-      answers: <String, Object?>{'key_file': keyFile},
-    );
+  test(
+    'THE PLANTED DEFECT: a file nothing ever writes stops the row that needs it, naming the path',
+    () async {
+      // Not an empty answer and not a default. What changed is WHEN: the file is read in front of
+      // every step rather than once at the top, because the case this rule exists for is a value the
+      // run itself produces — a machine that mints a credential and spends it two rows later has no
+      // such file when the run starts. So the row that needs it is where the run stops, and the path
+      // is named beside that row's own words rather than instead of them.
+      final ({RunRecord closed, List<String> lines}) ran = await runAndRead(
+        readsItFromTheFile(),
+        answers: <String, Object?>{'key_file': keyFile},
+      );
 
-    expect(ran.closed.exitCode, 1);
-    expect(ran.closed.steps, isEmpty, reason: 'nothing ran against the machine');
-    expect(ran.closed.issues.single, allOf(contains('auth_key'), contains(keyFile)));
-  });
+      expect(ran.closed.exitCode, 1);
+      expect(
+        ran.closed.issues.join(' '),
+        allOf(contains('auth_key'), contains(keyFile)),
+        reason: 'the path an operator acts on is in the issues',
+      );
+    },
+  );
+
+  test(
+    'THE CASE THE RULE EXISTS FOR: a row writes the file, and a later row spends the value',
+    () async {
+      // The whole point, and it could not pass before: nothing supplies the credential, it does not
+      // exist when the run starts, and the row that reads it runs after the row that wrote it. A run
+      // that goes green here is the mint-and-spend a machine has to do on its own.
+      final Program mintsThenSpends = programOf(
+        'p',
+        const <(String, OnFailure, List<String>)>[
+          ('writes', OnFailure.exit, <String>[]),
+          ('says', OnFailure.exit, <String>[]),
+        ],
+        arguments: <String, Arguments>{
+          'writes': const Arguments(<String, Object>{'path': keyFile, 'content': credential}),
+          'says': const Arguments(<String, Object>{'answer': 'auth_key'}),
+        },
+        answers: const DeclaredAnswers(<ArgumentSpec>[
+          ArgumentSpec(name: 'key_file', kind: ArgumentKind.text, describes: 'where it stands'),
+          ArgumentSpec(
+            name: 'auth_key',
+            kind: ArgumentKind.text,
+            required: false,
+            describes: 'the credential standing in that file',
+            derivation: Derivation(rule: DerivationRule.secretInFileAt, from: 'key_file'),
+          ),
+        ]),
+      );
+
+      final ({RunRecord closed, List<String> lines}) ran = await runAndRead(
+        mintsThenSpends,
+        answers: <String, Object?>{'key_file': keyFile},
+      );
+
+      expect(
+        ran.closed.exitCode,
+        0,
+        reason: 'the row that wrote it and the row that spent it both ran',
+      );
+      expect(ran.closed.steps, hasLength(2));
+      expect(
+        ran.lines.where((String line) => line.contains(credential)),
+        isEmpty,
+        reason: 'registered with the redactor the moment it appeared, not when the run started',
+      );
+    },
+  );
 
   test('a file holding only whitespace ends it the same way', () async {
     final ({RunRecord closed, List<String> lines}) ran = await runAndRead(
