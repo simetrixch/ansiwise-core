@@ -49,13 +49,10 @@ shared-gate: test/checks/shared_gate_test.dart
 package-gate: test/checks/package_gate_test.dart
 # The version guard, driven with scripted versions.
 version-guard: test/checks/version_guard_test.dart
-# A version and a channel compose the one tag that starts a release, held against the filter
-# .github/workflows/release.yml triggers on — READ from that file rather than restated in Dart — and
-# pushed only when a person typed both. The two things no glob can state are stated in Dart and
-# checked here: a number carries no leading zero, and alpha is less ripe than stable, which is what
-# decides whether the release page marks a pre-release. This package is compiled into nothing, so a
-# tag typed straight into git is the whole of what somebody else would then resolve, held to nothing.
-release: test/checks/release_test.dart
+# THE RELEASE CHECK IS GONE, AND SO IS THE RELEASE. This package is a part of ansiwise-cli
+# and is released by nobody: there is no tag to compose, no channel to admit a stage, and no
+# release page to mark. What used to be checked here now lives once, in the product's own
+# release/release.sh, and the machinery it judged was deleted with it on 2026-09-01.
 # Every dependency this package resolves out of git names a release tag and never a branch. Only a
 # DEV dependency stands here, so what this keeps is not a consumer — a consumer never resolves one —
 # but the gate itself: the tree at a release tag IS the release, and a dev dependency following a
