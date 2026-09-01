@@ -11,8 +11,15 @@ library;
 
 /// The Dart SDK the checks are true against, and the only tool the gate starts.
 ///
-/// storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION — read 2026-08-17,
-/// which answered version 3.13.0, released 2026-08-05, revision da6595cd6bb5. The previous pin was
-/// 3.12.2, read from the same source on 2026-08-08; the toolchain on the machine moved under it and
-/// this guard refused every run, which is the guard working rather than failing.
-const String dartVersion = '3.13.0';
+/// The toolchain on the workstation, read 2026-09-01: `dart --version` answered 3.13.1 (stable),
+/// built 2026-08-18. The previous pin was 3.13.0, read from
+/// storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION on 2026-08-17; before
+/// that 3.12.2, on 2026-08-08. Each time the toolchain on the machine moved under the pin and this
+/// guard refused every run, which is the guard working rather than failing.
+///
+/// RAISED RATHER THAN INSTALLED ALONGSIDE, on 2026-09-01. The workstation carried 3.13.1 and no
+/// 3.13.0, so the gate could not run there at all — and a gate that cannot run is a gate nobody
+/// uses: two releases were cut that day on `dart test` alone, which is a subset of what this gate
+/// asks. The build workflow takes its SDK from THIS constant, so raising it moves the machine and
+/// the build together rather than splitting them.
+const String dartVersion = '3.13.1';
