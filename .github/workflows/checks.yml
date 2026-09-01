@@ -1,0 +1,66 @@
+# =============================================================================
+# checks — this repository is linted and tested here. Nothing is built, tagged
+# or released.
+# =============================================================================
+#
+# WHAT THIS REPOSITORY IS. A passive part of ansiwise-cli. It produces no binary,
+# it is named by nobody outside the four ansiwise trees, and it has no release of
+# its own: the product names the COMMIT it was built from, and that commit is
+# what a build resolves. So there is nothing here to publish — only something to
+# judge.
+#
+# WHY IT IS JUDGED HERE AS WELL. The release loads this tree and judges it before
+# it builds anything, so a red part stops a release before a binary exists. That
+# is the verdict that decides. This workflow is the earlier one: it answers on a
+# push, so a part is found red where it was written rather than at the moment
+# somebody wanted to release the product.
+#
+# THE SAME THING RUNS LOCALLY. build.sh and build.ps1 in the root of this
+# repository do what the job below does, in the same order — for the times when
+# waiting for a runner is the wrong shape of work.
+name: checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: the gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # THE PIN IS READ, NOT WRITTEN OUT. tool/gate/pins.dart names the one Dart
+      # the checks of this repository are true against, and the gate refuses any
+      # other. A version restated here would be a second carrier of that fact and
+      # would drift from the one the gate enforces.
+      - id: pin
+        name: read the pinned Dart version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n "s/^const String dartVersion = '\(.*\)';\$/\1/p" tool/gate/pins.dart)"
+          test -n "$version"
+          echo "dart=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+        with:
+          sdk: ${{ steps.pin.outputs.dart }}
+
+      - name: dart pub get
+        run: dart pub get
+
+      # ITS OWN GATE, not a list of commands repeated here. It analyses, formats,
+      # tests, and asks whether this package still declares the checks it claims
+      # to run — and a check this file spelled out instead would go stale the day
+      # the gate grew one.
+      - name: dart run tool/ci.dart
+        run: dart run tool/ci.dart
