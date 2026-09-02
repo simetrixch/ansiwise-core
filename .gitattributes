@@ -2,9 +2,10 @@
 # read on a Linux machine, and a file that arrives with CRLF is a different file there. The
 # difference shows up as a finding about the code rather than about the line endings.
 #
-# There is no rule for a shell script here, and that is deliberate rather than an omission: this
-# repository holds no shell at all — the gate, the analyzer check and everything under tool/ are
-# Dart programs.
+# The shell here is the check entry point under scripts/ and the push hook under .githooks/;
+# everything under tool/ is a Dart program. A shell file checked out with CRLF fails at its shebang
+# with "bad interpreter: /bin/bash^M", and the shebang is the first thing that runs, so the failure
+# is total and its message names the interpreter rather than the line endings.
 
 # Normalize all text to LF in the repo AND on checkout, on every platform.
 * text=auto eol=lf
@@ -15,6 +16,9 @@
 *.json    text eol=lf
 *.md      text eol=lf
 *.words   text eol=lf
+*.sh      text eol=lf
+# The hook is named after the moment git calls it, so it carries no extension of its own.
+.githooks/*  text eol=lf
 
 # Binary artifacts — never touch line endings.
 *.tgz   binary
