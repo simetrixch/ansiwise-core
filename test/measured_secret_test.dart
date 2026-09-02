@@ -9,11 +9,11 @@ import 'support/harness.dart';
 
 /// A credential that did not exist when the run started, and the record it must not be in.
 ///
-/// **What this is about.** The redactor used to be fixed the moment it was built, out of the answers
-/// an operator gave before anything ran. A step that MINTS a credential mid-run — or reads one off
-/// the machine — produced a value it had never seen, so the value went into a world-readable file
-/// through the first surface that carried it. The value is now registered with the redactor at the
-/// moment it is published, by the run's own sink, and every line written from there on hides it.
+/// **What this is about.** A redactor fixed the moment it is built, out of the answers an operator
+/// gave before anything ran, has never seen the value a step MINTS mid-run — or reads off the
+/// machine — so that value goes into a world-readable file through the first surface that carries
+/// it. The value is registered with the redactor at the moment it is published, by the run's own
+/// sink, and every line written from there on hides it.
 ///
 /// **How far that reaches is measured here too, because it is not everything.** A line already
 /// written cannot have anything taken out of it, so a step that writes the value before it publishes

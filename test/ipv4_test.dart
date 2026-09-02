@@ -42,9 +42,9 @@ void main() {
   });
 
   group('a range that cannot be read', () {
-    // THIS is what the group above is for. It used to answer "no overlap" for anything it could not
-    // parse, so a step refusing a range that collides with the machine's own network passed on a
-    // typo — and the record showed a check that had run and found nothing.
+    // THIS is what the group above is for. Answering "no overlap" for anything it cannot parse lets
+    // a step refusing a range that collides with the machine's own network pass on a typo — and the
+    // record then shows a check that had run and found nothing.
     test('refuses rather than reporting no overlap, and names the value it could not read', () {
       expect(
         () => cidrOverlap('10.0.0.0/8', 'not-a-range'),

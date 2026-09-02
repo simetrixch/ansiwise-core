@@ -139,8 +139,8 @@ void main() {
         );
 
     test('THE RECORD IS CLOSED, with an end and an exit code', () async {
-      // Measured on a machine before it was fixed: the record kept no end and no exit code, so
-      // everything reading records afterwards showed a run still going while the process was gone.
+      // Measured on a machine: a record left with no end and no exit code makes everything reading
+      // records afterwards show a run still going while the process is gone.
       final Harness h = Harness();
       final RunRecord record = await h.runner.run(
         program: programThatCannotAsk(),
@@ -177,14 +177,14 @@ void main() {
 
     test('AND SO DOES ANY OTHER FAILURE, which is what makes the record trustworthy', () async {
       // The general case, found the same way as the one above and one step further along: a step
-      // whose restart never came back threw a plain state error, and the record stayed open with no
-      // end and no exit code. Every reader of records then showed a run still going while the
-      // process was gone — for ever, since nothing was left to correct it.
+      // whose restart never comes back throws a plain state error, and a record left open by it has
+      // no end and no exit code. Every reader of records then shows a run still going while the
+      // process is gone — for ever, since nothing is left to correct it.
       //
       // A throw out of a step is the ROW's failure, whatever its Dart type, so what was thrown is
-      // read where an operator looks for it: the last row of the record. It used to be the run's
-      // single issue over a record holding no rows at all, because a StateError is not an Exception
-      // and every catch in the engine but one asked for an Exception.
+      // read where an operator looks for it: the last row of the record, and not the run's single
+      // issue over a record holding no rows at all — which is where it lands wherever a catch in
+      // the engine asks for an Exception, since a StateError is not one.
       final Harness h = Harness();
       final ResolvedProgram program =
           ProgramResolver(

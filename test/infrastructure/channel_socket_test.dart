@@ -7,17 +7,17 @@ import 'package:test/test.dart';
 
 /// The channel dressed as a socket, and the one property everything above it rests on.
 ///
-/// **THE DEFECT THIS EXISTS FOR SHIPPED AND WAS SILENT.** `ChannelServerSocket` handed out its one
-/// connection from a stream that ended the moment it had yielded it. `HttpServer.listenOn` ends its
-/// own stream of requests when the server socket it was given ends — so the server closed in the
-/// same turn it was opened, and a request already on its way arrived at a server that had shut.
-/// `ansiwise serve` over a session answered NOTHING, exited zero, and said nothing about why: the
-/// door the operator app and every first installation of every machine depend on.
+/// **THE DEFECT THIS EXISTS FOR IS SILENT.** A `ChannelServerSocket` that hands out its one
+/// connection from a stream ending the moment it has yielded it closes the server in the same turn
+/// it is opened: `HttpServer.listenOn` ends its own stream of requests when the server socket it
+/// was given ends, and a request already on its way arrives at a server that has shut.
+/// `ansiwise serve` over a session then answers NOTHING, exits zero, and says nothing about why —
+/// the door the operator app and every first installation of every machine depend on.
 ///
-/// **WHY NOTHING CAUGHT IT.** Every test fed the connection from a `StreamController` whose data was
-/// already queued, so the request won the race against the close often enough to look correct. A real
-/// session — a process reading its own standard input — loses that race every time. So what is
-/// asserted here is not "a request is answered" but the property underneath it: **the stream of
+/// **WHY A TEST MISSES IT.** A test that feeds the connection from a `StreamController` whose data
+/// is already queued lets the request win the race against the close often enough to look correct.
+/// A real session — a process reading its own standard input — loses that race every time. So what
+/// is asserted here is not "a request is answered" but the property underneath it: **the stream of
 /// connections does not end by itself.**
 void main() {
   group('the server socket', () {
@@ -40,8 +40,8 @@ void main() {
         connection.listen((Uint8List _) {});
       }, onDone: () => ended = true);
 
-      // Long enough for a stream that ends after one value to have ended: the old shape completed
-      // in the same turn, and anything waiting on it lost.
+      // Long enough for a stream that ends after one value to have ended: a shape that completes
+      // in the same turn is gone before anything waiting on it gets a look.
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(offered, hasLength(1), reason: 'the one connection was never offered');

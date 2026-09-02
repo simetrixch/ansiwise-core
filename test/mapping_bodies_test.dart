@@ -5,12 +5,11 @@ import 'package:yaml/yaml.dart';
 /// The grammar of a mapping entry's body, and the line between what the framework reads and what
 /// belongs to the step.
 ///
-/// **Why this file exists, and it is a defect this suite did not catch.** The rule was first built
-/// as "a body is `{answer: <name>}` or `{measured: <name>}` and nothing else", which reads well and
-/// refuses eight rows that ship in a real installation — among them
-/// `{ answer: <name>, join: ", " }` and `{ file: <path>, key: <name>, split: ", ", join: "', '" }`.
-/// Every one of them is a step reading its own properties beside a source, or resolving a source
-/// the framework never had a word for.
+/// **Why this file exists, and what a suite without it does not catch.** A rule built as "a body is
+/// `{answer: <name>}` or `{measured: <name>}` and nothing else" reads well and refuses eight rows
+/// that ship in a real installation — among them `{ answer: <name>, join: ", " }` and
+/// `{ file: <path>, key: <name>, split: ", ", join: "', '" }`. Every one of them is a step reading
+/// its own properties beside a source, or resolving a source the framework has no word for.
 ///
 /// So the line is not "these two shapes or nothing". It is: the framework reads TWO WORDS and passes
 /// over the rest, because reading the rest would put a step's private vocabulary inside the engine.

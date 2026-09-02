@@ -1,8 +1,8 @@
 /// The identifiers this framework passes around.
 ///
 /// Each is an extension type over [String]: a distinct static type at zero runtime cost. A function
-/// taking a step name and a program name can no longer be called with the two the wrong way round,
-/// which two bare strings would have allowed.
+/// taking a step name and a program name cannot be called with the two the wrong way round, which
+/// two bare strings would have allowed.
 library;
 
 /// The registered name of a step, as a program file writes it and as the record reports it.

@@ -327,9 +327,9 @@ final class StepExecution {
   /// **BOTH TIMES THE CHECK IS ASKED COME THROUGH HERE**, the one before the apply and the
   /// postcondition after it, because they are one method and a throw out of either is the step
   /// failing to answer. The second is where it costs most: it is the only reading taken after the
-  /// machine has been changed, so a throw there used to leave this branch entirely and the row was
-  /// closed by the catch at the top of [execute] — which carries no applied step, so a row that had
-  /// written was never unwound.
+  /// machine has been changed, so a throw there escaping this branch is closed by the catch at the
+  /// top of [execute] — which carries no applied step, so a row that had written would never be
+  /// unwound.
   ///
   /// Found on a real machine and findable nowhere else: a fake shell answers an argv without the
   /// executable needing to exist, so a suite is green over a program that stops at its fourth step.
@@ -519,10 +519,11 @@ final class StepExecution {
           // and the capture taken above is exactly what putting that back needs.
           //
           // EVERYTHING IT CAN THROW IS CAUGHT, and not only what implements Exception. An Error out
-          // of a plugin's apply used to pass this catch and the one at the top of execute() alike,
-          // reaching Runner.run's `on Object`, which closes the record with no rows: the write
-          // stood, nothing was taken back, and the record an operator would read it out of was
-          // empty. A step that failed is a failed row whatever the Dart type of its throw.
+          // of a plugin's apply passes a catch that asks for an Exception, here and at the top of
+          // execute() alike, and reaches Runner.run's `on Object`, which closes the record with no
+          // rows: the write stands, nothing is taken back, and the record an operator would read it
+          // out of is empty. A step that failed is a failed row whatever the Dart type of its
+          // throw.
           applied.add(_applied(resolved, step, context, captured));
           return _finish(
             resolved: resolved,

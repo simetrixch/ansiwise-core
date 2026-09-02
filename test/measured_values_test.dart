@@ -750,9 +750,7 @@ void main() {
     });
   });
 
-  // WHAT THE CLIENT IS TOLD ABOUT SUCH A ROW is not measured here, and this comment used to name a
-  // suite that measures it — ansiwise-rest/test/rest/measured_values_over_the_wire_test.dart, which
-  // has never existed in any repository. What the endpoints answer is covered by the suites under
-  // ansiwise-cli/test/rest/, and whether a measured value reaches a caller UNDER THAT NAME is
-  // covered by none of them.
+  // WHAT THE CLIENT IS TOLD ABOUT SUCH A ROW is not measured here. What the endpoints answer is
+  // covered by the suites under ansiwise-cli/test/rest/, and whether a measured value reaches a
+  // caller UNDER THAT NAME is covered by none of them.
 }

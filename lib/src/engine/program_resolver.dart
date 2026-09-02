@@ -78,13 +78,13 @@ final class ProgramResolver {
             );
           }
         }
-        // A MAPPING NAMES ANSWERS TOO, one per entry, and they were the ones nobody checked.
+        // A MAPPING NAMES ANSWERS TOO, one per entry, and this walk is what checks them.
         //
-        // `values: {build-plane: {answer: build_plane}}` binds a slot to an answer, and until this
-        // walk existed the resolver looked only at arguments whose whole value IS an answer name. So
-        // a row binding a slot to an answer nobody declared resolved, and what an operator met was a
-        // refusal at the moment the template was filled — naming the SLOT, which is the half they
-        // did not get wrong, on a run that had already begun.
+        // `values: {build-plane: {answer: build_plane}}` binds a slot to an answer, and a resolver
+        // that looks only at arguments whose whole value IS an answer name resolves a row binding a
+        // slot to an answer nobody declared. What an operator then meets is a refusal at the moment
+        // the template is filled — naming the SLOT, which is the half they did not get wrong, on a
+        // run that has already begun.
         //
         // Both halves are named here because either can be the mistake: the slot may be misspelt
         // against the template, or the answer against the program, and a message carrying one of

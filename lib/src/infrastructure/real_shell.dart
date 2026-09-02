@@ -13,12 +13,12 @@ import '../model/failures.dart';
 /// be part of, which is why the whole class of quoting failures a shell script spends its comments
 /// on cannot occur here.
 ///
-/// **That holds for an elevated command too, and it used not to.** Raising a command to root once
-/// meant handing `sh -c` a line that redirected a fixed path into the elevating tool. Three things
-/// were wrong with it at once: the path was a literal nobody could change, a missing file failed
-/// inside the shell and came back as a non-zero exit of the STEP's command, and the quoting the rest
-/// of this class exists to avoid was back. The elevating tool is now started directly, like any
-/// other executable, and the password reaches it on its standard input.
+/// **That holds for an elevated command too.** Raising a command to root by handing `sh -c` a line
+/// that redirects a fixed path into the elevating tool is wrong three ways at once: the path is a
+/// literal nobody can change, a missing file fails inside the shell and comes back as a non-zero
+/// exit of the STEP's command, and the quoting the rest of this class exists to avoid is back. The
+/// elevating tool is started directly, like any other executable, and the password reaches it on
+/// its standard input.
 final class RealShell implements Shell {
   /// Creates the shell a real run is given, told where an elevation password comes from.
   ///

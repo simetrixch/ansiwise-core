@@ -7,11 +7,11 @@ import 'on_failure.dart';
 /// Sealed, so every place that reacts to a verdict must handle all three cases. Adding a fourth
 /// breaks the build at every such place instead of falling into somebody's default branch.
 ///
-/// **Three, where there used to be five.** A step that failed and ended the run, a step that failed
-/// and was carried to the end as a problem, and a step that failed and was only noted were three
-/// classes for one thing. What differed between them was not what the step did — it failed — but
-/// what the program said should happen next, and how loudly it was written down. Both of those are
-/// recorded elsewhere and were being restated here as a third and a fourth word.
+/// **ONE FAILURE, NOT ONE VERDICT PER OUTCOME OF ONE.** A step that failed and ended the run, a
+/// step that failed and was carried to the end as a problem, and a step that failed and was only
+/// noted are three classes for one thing. What differs between them is not what the step did — it
+/// failed — but what the program said should happen next, and how loudly it is written down. Both
+/// of those are recorded elsewhere, and a verdict apiece restates them here.
 @immutable
 sealed class Verdict {
   const Verdict();

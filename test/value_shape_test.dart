@@ -23,7 +23,7 @@ void main() {
     });
 
     test('a label that begins or ends with a hyphen is not one', () {
-      // The pattern this replaced admitted both, and it admitted `-.-` outright — a check that
+      // A pattern that admits a leading or a trailing hyphen admits `-.-` outright — a check that
       // accepts that reads as a guarantee it does not give.
       expect(ValueShape.hostname.holds('-.-'), isFalse);
       expect(ValueShape.hostname.holds('-bad.example.com'), isFalse);
@@ -49,7 +49,8 @@ void main() {
     });
 
     test('a space anywhere is not a mailbox', () {
-      // The pattern this replaced accepted the local part with a space in it.
+      // The LOCAL part is where a space slips through a loosely anchored pattern, so both halves
+      // are probed.
       expect(ValueShape.mailbox.holds('two words@example.com'), isFalse);
       expect(ValueShape.mailbox.holds('somebody@exa mple.com'), isFalse);
     });

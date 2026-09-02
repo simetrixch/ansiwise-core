@@ -3,18 +3,18 @@
 /// **WHY THIS IS IN THE FRAMEWORK AND NOT IN A DOOR.** A run can be told in two ways — a command
 /// line reading standard input, and `POST /runs` over the API — and both take the same thing: the
 /// answers, and the password that raises a command to root where the installation says the caller
-/// hands it over. Each door used to describe that shape itself, and three defects in one day came
-/// out of exactly that:
+/// hands it over. A door that describes that shape itself drifts from the other one, and every
+/// drift is one door missing something the other already knows:
 ///
-///   * the launcher wrote the bare answers while the run had begun demanding the envelope, so every
-///     run started over the API died before writing its header,
-///   * the API had no route for the password at all, so no program with an elevated row could be
-///     run through it,
-///   * the API refused every list answer, because only the other door fixed the element type a JSON
-///     decoder leaves as `List<dynamic>`.
+///   * a launcher that writes the bare answers while the run demands the envelope, so every run
+///     started over that door dies before writing its header,
+///   * a door with no route for the password at all, so no program with an elevated row can be run
+///     through it,
+///   * a door that refuses every list answer, because only the other one fixes the element type a
+///     JSON decoder leaves as `List<dynamic>`.
 ///
-/// None of the three was a hard problem. Each was one door learning something the other already
-/// knew. So the shape lives here, once, and a door parses nothing of its own.
+/// None of the three is a hard problem, and none of them is visible from inside one door. So the
+/// shape lives here, once, and a door parses nothing of its own.
 library;
 
 import '../domain/answers.dart';

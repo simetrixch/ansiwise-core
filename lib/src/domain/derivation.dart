@@ -107,7 +107,7 @@ enum DerivationRule {
   /// **So the fingerprint carries the PATH and not the value**, exactly as it carries the wiring
   /// and not the value of an argument measured while the run happens. What a dry run proves about
   /// this answer is that the file was there and readable, and not that the real run will read the
-  /// same text out of it. The alternative was worse: with the value in the material, a credential
+  /// same text out of it. The alternative is worse: with the value in the material, a credential
   /// minted again between the two runs would leave the real run refused by the gate for ever, and
   /// no retry could clear it.
   ///

@@ -263,10 +263,10 @@ DeclaredAnswers _answers(YamlMap document, _Refusals refusals) {
         refusals.add(line, '"$name" has "stated_when", so it cannot be "required: true"');
         continue;
       }
-      // ONE REGISTERED NAME AND NOTHING ELSE. It used to be a comparison written here — an answer,
-      // and either a literal or a second answer to match it against — which is a condition living in
-      // a program file beside the registered ones. A file that can compare two values can compare
-      // anything, and then what an operator debugs is the file rather than the code.
+      // ONE REGISTERED NAME AND NOTHING ELSE. A comparison written here — an answer, and either a
+      // literal or a second answer to match it against — is a condition living in a program file
+      // beside the registered ones. A file that can compare two values can compare anything, and
+      // then what an operator debugs is the file rather than the code.
       if (statedWhenNode is! YamlMap ||
           statedWhenNode.length != 1 ||
           statedWhenNode['predicate'] is! String) {
@@ -480,9 +480,9 @@ const Set<String> _programKeys = <String>{'name', 'roles', 'steps', 'answers', '
 
 /// The keys above, as a refusal writes them.
 ///
-/// Derived rather than written out a second time: the two lists were kept in step by hand until a
-/// key was added and the refusals went on naming three, so an operator mistyping the new key was
-/// told it does not exist.
+/// Derived rather than written out a second time: two lists kept in step by hand drift the moment a
+/// key is added, the refusals go on naming the set without it, and an operator mistyping the new
+/// key is told it does not exist.
 final String _programKeyList = _programKeys.map((String key) => '"$key"').join(', ');
 
 /// The keys one answer declaration may write.

@@ -18,14 +18,14 @@
 /// plugin closes a loop, and from that moment the plugin is not optional: whoever wants the
 /// framework drags it along.
 ///
-/// This used to be measured by ORIGIN instead: every package reached from outside this repository
-/// had to be hosted on pub.dev, on the reasoning that the only things of ours below the framework
-/// are its plugins. That was true while it was true, and it stopped being true the day an audit
-/// library of ours came to stand beside the framework with an empty dependency list. Such a package
-/// cannot be a plugin and cannot close a loop, and refusing it taught nobody anything.
+/// **IT IS NOT MEASURED BY ORIGIN.** Requiring every package reached from outside this repository
+/// to be hosted on pub.dev rests on the reasoning that the only things of ours below the framework
+/// are its plugins, and that does not hold: an audit library of ours stands beside the framework
+/// with an empty dependency list. Such a package cannot be a plugin and cannot close a loop, and
+/// refusing it teaches nobody anything.
 ///
 /// So the question asked here is the one the rule's own title asks: **does this package lead back
-/// to the framework?** For every plugin the answer is unchanged.
+/// to the framework?** For every plugin the answer is the same under either measure.
 ///
 /// **A PACKAGE THAT CANNOT BE READ IS REPORTED, not passed over.** An edge this check cannot follow
 /// is an edge whose answer is unknown, and answering "no loop" about something nobody looked at is

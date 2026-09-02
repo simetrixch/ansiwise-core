@@ -86,8 +86,8 @@ void main() {
     });
 
     test('the message names the surface the decision came from', () async {
-      // It used to say "--no-unwind was given" whatever had decided it, so an operator who set a
-      // key in a configuration file was told about a command-line option they never typed.
+      // A message that says "--no-unwind was given" whatever decided it tells an operator who set
+      // a key in a configuration file about a command-line option they never typed.
       final Harness h = Harness();
       await refusingToUnwind(
         h,
@@ -117,10 +117,10 @@ void main() {
 
   group('a step whose apply THREW', () {
     // The contract on Step.undo says it must tolerate being called after a partial apply, "and that
-    // is exactly when it matters". It used to be the one path where it was never called: an apply
-    // that threw left the step's own branch entirely, and the answer that came back carried no
-    // applied step — so the unwind never reached it, the capture was discarded, and what the step
-    // changed before it threw stood while its kind still said it could be taken back.
+    // is exactly when it matters". It is also the path most easily missed: an apply that throws
+    // leaves the step's own branch entirely, and an answer that carries no applied step is one the
+    // unwind never reaches — the capture is discarded, and what the step changed before it threw
+    // stands while its kind still says it can be taken back.
 
     ResolvedProgram writesThenStops({bool throwsAnError = false}) =>
         ProgramResolver(
@@ -150,11 +150,11 @@ void main() {
     });
 
     test('is taken back where the apply threw an Error and not an Exception', () async {
-      // The catch beside the apply asked for an Exception, so a StateError, a cast, an index or a
-      // null out of a plugin's own apply passed it, passed the catch at the top of the step as
-      // well, and was caught by the runner's last one — which closes a record holding NO rows at
-      // all. The write stood, the unwind never ran, and the record an operator would read it out
-      // of said nothing about the step that had changed the machine.
+      // A catch beside the apply that asks for an Exception lets a StateError, a cast, an index or
+      // a null out of a plugin's own apply past it, past the catch at the top of the step as well,
+      // and into the runner's last one — which closes a record holding NO rows at all. The write
+      // stands, the unwind never runs, and the record an operator would read it out of says
+      // nothing about the step that changed the machine.
       final Harness h = Harness();
       final RunRecord closed = await h.runner.run(
         program: writesThenStops(throwsAnError: true),
@@ -170,16 +170,16 @@ void main() {
   });
 
   group('a throw the engine could not classify', () {
-    // ONE QUESTION AT THREE CALL SITES, and the engine used to hold two answers to it. The check
-    // either side of the apply answered Object; the catch beside the apply and the catch at the top
-    // of the step both answered Exception, so which record an operator got depended on which of
-    // them a throw happened to meet.
+    // ONE QUESTION AT THREE CALL SITES, and the engine holds ONE answer to it. Where the check
+    // either side of the apply answers Object while the catch beside the apply and the catch at the
+    // top of the step answer Exception, which record an operator gets depends on which of them a
+    // throw happens to meet.
 
     test('an Error out of a CAPTURE closes the row, and takes nothing back', () async {
       // Both halves at once. The capture runs before the apply — it is the reading an undo is built
       // out of — so this row wrote nothing, and taking it back would delete a file the run found
-      // already there. What used to happen is neither: the Error left the engine and the record
-      // closed holding no rows about the row that refused.
+      // already there. The third outcome is neither: an Error that leaves the engine closes the
+      // record holding no rows about the row that refused.
       final Harness h = Harness(files: FakeFiles(<String, String>{'/kept': 'was here'}));
       final ResolvedProgram program =
           ProgramResolver(
@@ -211,9 +211,9 @@ void main() {
     });
 
     group('an Error out of an UNDO', () {
-      // The throw that happens while a failed run is already cleaning up. It used to leave the
-      // unwind loop entirely: every step still to be taken back stood, and the record closed with
-      // no rows in it.
+      // The throw that happens while a failed run is already cleaning up. One that leaves the
+      // unwind loop entirely leaves every step still to be taken back standing, and closes the
+      // record with no rows in it.
 
       ResolvedProgram twoWritesTheSecondOfWhichCannotBePutBack({bool throwsAnError = false}) =>
           ProgramResolver(
@@ -279,9 +279,9 @@ void main() {
 
   group('a recorder that refuses a line', () {
     // WHAT A FULL EVENT FILE DOES TO A RUN. Every row is closed by recording it, so the write that
-    // refuses is the last thing a row does — and the row's answer, which used to be where the
-    // engine kept whether the step had applied, never came back. The unwind then never reached a
-    // row that HAD written, and the record said the step applied nothing.
+    // refuses is the last thing a row does — and an engine that keeps whether the step applied in
+    // the row's ANSWER never gets that answer back. The unwind then never reaches a row that HAD
+    // written, and the record says the step applied nothing.
 
     ResolvedProgram writesThenFails() =>
         ProgramResolver(
@@ -322,8 +322,8 @@ void main() {
       // The first refusal is answered by closing the row again, which needs the recorder to have
       // recovered. A recorder that refuses every time it is asked throws out of the step entirely,
       // and everything the walk had collected — the rows before this one AND the list the unwind
-      // walks — used to go with it: a machine changed by every step that had run was then neither
-      // taken back nor named anywhere.
+      // walks — goes with it unless it is held outside the step: a machine changed by every step
+      // that had run is then neither taken back nor named anywhere.
       final Harness h = Harness();
       final RefusingRecorder recorder = RefusingRecorder(
         h.recorder,
@@ -368,10 +368,10 @@ void main() {
   group('a step whose POSTCONDITION threw', () {
     // THE ONE THROW THAT MEETS AN ALREADY-CHANGED MACHINE. The reading a real run judges a row by is
     // taken AFTER the apply, so the write stands by the time it can throw; every other place a step
-    // can throw is before the write or is the write. It used to be read outside the branch that
-    // keeps what an undo needs, so the throw left the step's own code entirely, the answer that came
-    // back carried no applied step, and the unwind never reached the one row whose reading could not
-    // confirm what it had done — while its kind went on telling the operator it could be taken back.
+    // can throw is before the write or is the write. Read outside the branch that keeps what an
+    // undo needs, that throw leaves the step's own code entirely, the answer that comes back
+    // carries no applied step, and the unwind never reaches the one row whose reading could not
+    // confirm what it had done — while its kind goes on telling the operator it can be taken back.
 
     ResolvedProgram writesThenCannotReadItBack(OnFailure onFailure, {bool throwsAnError = false}) =>
         ProgramResolver(
@@ -393,9 +393,9 @@ void main() {
         );
 
     test('is taken back, and the machine is clean after the run', () async {
-      // The ticket's own scenario: the row writes, its postcondition throws, the program carries the
-      // run past it, and a later row ends the run. What is asserted is the state of the machine
-      // afterwards and not a list the engine keeps.
+      // The scenario: the row writes, its postcondition throws, the program carries the run past
+      // it, and a later row ends the run. What is asserted is the state of the machine afterwards
+      // and not a list the engine keeps.
       final Harness h = Harness();
       await h.runner.run(
         program: writesThenCannotReadItBack(OnFailure.continueRun),
@@ -425,10 +425,10 @@ void main() {
 
     test('is taken back where the reading threw an Error and not an Exception', () async {
       // THE OTHER HALF OF WHAT A READING THAT DID NOT COME BACK CAN BE, and the more expensive one.
-      // An Error out of a step's own code — a cast, an index, a null — passed every catch in the
-      // engine and was caught by the runner's last one, which closes a record holding NO rows at
-      // all: the write stood, the unwind never ran, and the record an operator would have read it
-      // out of had nothing in it.
+      // An Error out of a step's own code — a cast, an index, a null — passes every catch that asks
+      // for an Exception and reaches the runner's last one, which closes a record holding NO rows
+      // at all: the write stands, the unwind never runs, and the record an operator would read it
+      // out of has nothing in it.
       final Harness h = Harness();
       final RunRecord closed = await h.runner.run(
         program: writesThenCannotReadItBack(OnFailure.continueRun, throwsAnError: true),
@@ -510,9 +510,8 @@ void main() {
       'THE SECOND INNOCENT NEIGHBOUR: a postcondition that was read is taken back too',
       () async {
         // The ordinary failing row: the postcondition answered, and the answer was that the machine
-        // is not in the state the step produces. It was already taken back before this change and
-        // still is, so a fix that moved the applied step from one branch to another rather than
-        // adding it to one cannot pass here.
+        // is not in the state the step produces. It is taken back, so a fix that MOVES the applied
+        // step from one branch to another rather than adding it to one cannot pass here.
         final Harness h = Harness();
         final ResolvedProgram program =
             ProgramResolver(
@@ -792,9 +791,10 @@ void main() {
       // so the run announces no boundary at all. A walk that stopped at "not a ReversibleStep" would
       // stop here, leave the write before it standing, and contradict what the run had just said.
       //
-      // This is the one shape the suite could not see: every other observing step in the fixtures is
-      // satisfied outright and never reaches the applied list, and point_of_no_return_test.dart's own
-      // case at :134 is about the ANNOUNCEMENT, which is the half that was already right.
+      // This is the one shape the rest of the suite does not reach: every other observing step in
+      // the fixtures is satisfied outright and never reaches the applied list, and
+      // point_of_no_return_test.dart's own 'is not a boundary, whatever kind it is' is about the
+      // ANNOUNCEMENT rather than the unwind.
       final Harness h = Harness();
       final ResolvedProgram program =
           ProgramResolver(

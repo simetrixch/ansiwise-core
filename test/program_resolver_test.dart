@@ -214,10 +214,10 @@ void main() {
   });
 
   test('a row binding a slot to an answer the program does not declare is refused, naming both', () {
-    // THE PLANTED DEFECT. `values:` names an answer once per entry, and until the resolver walked a
-    // mapping it looked only at arguments whose WHOLE value is an answer name. So this resolved, and
-    // what an operator met was a refusal while the template was being filled — naming the slot,
-    // which is the half they did not get wrong, on a run that had already begun.
+    // THE PLANTED DEFECT. `values:` names an answer once per entry, and a resolver that looks only
+    // at arguments whose WHOLE value is an answer name resolves this. What an operator then meets
+    // is a refusal while the template is being filled — naming the slot, which is the half they did
+    // not get wrong, on a run that has already begun.
     expect(
       () => const ProgramResolver(_bindsSlotsToAnswers).resolve(
         programOf(

@@ -53,8 +53,8 @@ void main() {
           ),
         ),
         reason:
-            'this used to fail inside a shell and come back as a non-zero exit of the step\'s own '
-            'command, which sends the operator to look at the wrong thing',
+            'a failure inside a shell comes back as a non-zero exit of the step\'s own command, '
+            'which sends the operator to look at the wrong thing',
       );
     });
 

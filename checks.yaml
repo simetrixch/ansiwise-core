@@ -49,10 +49,9 @@ shared-gate: test/checks/shared_gate_test.dart
 package-gate: test/checks/package_gate_test.dart
 # The version guard, driven with scripted versions.
 version-guard: test/checks/version_guard_test.dart
-# THE RELEASE CHECK IS GONE, AND SO IS THE RELEASE. This package is a part of ansiwise-cli
+# THERE IS NO RELEASE CHECK, BECAUSE THERE IS NO RELEASE. This package is a part of ansiwise-cli
 # and is released by nobody: there is no tag to compose, no channel to admit a stage, and no
-# release page to mark. What used to be checked here now lives once, in the product's own
-# release/release.sh, and the machinery it judged was deleted with it on 2026-09-01.
+# release page to mark. Releasing happens once, in the product's own release/release.sh.
 # Every dependency this package resolves out of git names a release tag and never a branch. Only a
 # DEV dependency stands here, so what this keeps is not a consumer — a consumer never resolves one —
 # but the gate itself: the tree at a release tag IS the release, and a dev dependency following a

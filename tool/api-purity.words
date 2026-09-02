@@ -21,7 +21,7 @@
 # mind and in a test fixture that names a real thing because a real thing was handy. Both read as
 # illustration on the day they are written and as specification a year later.
 
-# The product this framework was cut out of, the platform it stands on, and the organisation behind
+# The product built on this framework, the platform it stands on, and the organisation behind
 # both. The same block stands on every plugin's list, word for word: a framework that may name no
 # platform and a plugin that may name no application of its tool are the same scan pointed at two
 # lists, and this is the part of the two lists that has to be identical.

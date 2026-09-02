@@ -5,14 +5,13 @@
 /// never came up; a cluster whose certificate issuer failed still stands, it just cannot issue a
 /// certificate.
 ///
-/// WHAT USED TO BE HERE AND WAS NOT A CONTROL DECISION. This carried three values — one that ended
-/// the run and two that did not. What separated those two was how loudly the failure was written
-/// down, which is a LOG LEVEL and not a question about what happens next. Pressed in here it made
-/// the set unreadable: three unrelated English words, no one of which implied the others, so the
-/// only way to learn the set was to guess wrong and read the refusal.
+/// WHAT IS NOT A CONTROL DECISION AND SO DOES NOT STAND HERE. How loudly a failure is written down
+/// is a LOG LEVEL, not a question about what happens next. Pressed in here it makes the set
+/// unreadable: unrelated English words, no one of which implies the others, so the only way to
+/// learn the set is to guess wrong and read the refusal.
 ///
-/// A step logs what happened whatever stands here, and it always did. Nothing in a program file has
-/// to say a second time that a failure was serious.
+/// A step logs what happened whatever stands here. Nothing in a program file has to say a second
+/// time that a failure was serious.
 enum OnFailure {
   /// The run ends here. Nothing after this step is attempted.
   exit,

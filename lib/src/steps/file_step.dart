@@ -47,8 +47,8 @@ base mixin FileStep on Step {
   /// **[FileContent.nothing] is the answer for a machine that has no business with the file at
   /// all** — a routing rule set where nothing is steered, a registry mirror where there is no
   /// registry to mirror. Without it a step in that position could not use this mixin: there is no
-  /// text that means "no file", so each wrote its own check, plan and apply instead, three copies of
-  /// what is here differing in exactly that one case.
+  /// text that means "no file", so it writes its own check, plan and apply instead — three copies
+  /// of what is here, differing in exactly that one case.
   ///
   /// One question and not two, because both answers usually come from the same reading: a step
   /// composes its text out of what it found, and where it found nothing there is no text to compose.
@@ -97,8 +97,8 @@ base mixin FileStep on Step {
       // THE DIRECTORY IS MADE FIRST, and here rather than in each step that writes. A path a row
       // names may be one nothing has created yet — a directory the product invented, or one on a
       // filesystem the machine empties — and a write into it fails with a message about a path that
-      // says nothing about whose job the path was. Three steps had already grown their own copy of
-      // this before it was written once.
+      // says nothing about whose job the path is. Left to each step, every step that writes grows
+      // its own copy of this.
       //
       // The mode follows the file's. A directory around a file nobody but its owner may read must
       // not be listable either, or the names in it say which secret lives where; a directory around

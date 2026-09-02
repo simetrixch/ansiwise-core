@@ -128,16 +128,17 @@ final class ChannelSocket extends Stream<Uint8List> implements Socket {
 /// One and not many, because a session is one connection. A client that wants a second opens a
 /// second session, which SSH multiplexes over the same transport — so watching four machines at
 /// once is four channels, not a listening port.
-/// **IT HANDS THE CONNECTION OVER AND THEN STAYS OPEN, and the second half is what was missing.**
-/// `HttpServer.listenOn` ends its own stream of requests when the server socket it was given ends,
-/// and a stream that yields one value ends the moment it has yielded it. So the server closed in the
-/// same turn it was handed the connection, and the request that was already on its way arrived at a
-/// server that had shut: `serve` over a session answered nothing at all, exited zero, and said
-/// nothing about why.
+/// **IT HANDS THE CONNECTION OVER AND THEN STAYS OPEN, and the second half is the one everything
+/// above it rests on.** `HttpServer.listenOn` ends its own stream of requests when the server
+/// socket it was given ends, and a stream that yields one value ends the moment it has yielded it.
+/// Such a server closes in the same turn it is handed the connection, and a request already on its
+/// way arrives at a server that has shut: `serve` over a session then answers nothing at all, exits
+/// zero, and says nothing about why.
 ///
-/// It survived every test because a test feeds the connection from a `StreamController` whose data
-/// is already queued, so the request won the race against the close often enough to look correct.
-/// A real session loses that race every time. What ends this stream now is [close] and nothing else.
+/// A test does not catch that on its own, because a test feeds the connection from a
+/// `StreamController` whose data is already queued, so the request wins the race against the close
+/// often enough to look correct. A real session loses that race every time. What ends this stream
+/// is [close] and nothing else.
 final class ChannelServerSocket extends Stream<Socket> implements ServerSocket {
   /// Offers the given connection as the only one this server will ever accept.
   ChannelServerSocket(this._connection);

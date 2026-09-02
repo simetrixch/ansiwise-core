@@ -75,9 +75,8 @@ steps:
     test('a row keeps its own flags when a default is folded into it', () {
       // THE REBUILD. Folding a default means building the row again, and a field the rebuild forgets
       // arrives as its default with nothing saying so: the file states it, the loader parses it, and
-      // the run behaves as though the line were never written. That happened to
-      // `rests_on_an_earlier_step`, and it cost an afternoon spent looking at the engine that reads
-      // the flag rather than at the copy that dropped it.
+      // the run behaves as though the line were never written. The search for it then starts at the
+      // engine that reads the flag rather than at the copy that dropped it.
       final ResolvedProgram program = resolve('''
 name: p
 roles: [master]

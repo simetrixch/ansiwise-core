@@ -110,9 +110,9 @@ final class Runner {
       // A FILE THAT IS NOT THERE YET IS NOT A FAILURE HERE. The case this rule exists for is a
       // machine that produces the value DURING the run — mints a credential, then spends it two
       // rows later — so at the top the file is absent by construction. Refusing on that absence
-      // made the rule unable to serve the only case it was built for. It is read again before every
-      // step instead (see the walk), and what is still unreadable when the walk ends is named in
-      // the issues rather than swallowed.
+      // would make the rule unable to serve the only case it exists for. It is read again before
+      // every step instead (see the walk), and what is still unreadable when the walk ends is named
+      // in the issues rather than swallowed.
       //
       // Read through the machine's own file port rather than a recording one. A read is not
       // recorded either way; what a recording port would add is a step to attribute it to, and
@@ -322,8 +322,9 @@ final class Runner {
         // A THROW THAT GOT PAST THE STEP'S OWN CATCH ENDS THE WALK AND KEEPS EVERYTHING SO FAR.
         // What can still arrive here is the recorder refusing a line: [StepExecution] closes every
         // row by recording it, so a full event file throws out of the last thing a row does. Left
-        // to reach the catch in [run], that took the rows the walk already had AND the list the
-        // unwind walks — a machine changed by twenty steps was then neither taken back nor named.
+        // to reach the catch in [run], it takes the rows the walk already had AND the list the
+        // unwind walks with it — a machine changed by every step that ran is then neither taken
+        // back nor named.
         //
         // The step that threw has no row, because building one is what threw. Its name and the
         // throw go into the issues instead, which is the only place left that an operator reads —

@@ -28,8 +28,8 @@ void main() {
     });
 
     test('THE PLANTED DEFECT: a comparison written in the file is refused', () {
-      // The shape this replaced. A file that can compare two values can compare anything, and then
-      // what an operator debugs is the file — so the loader refuses it rather than reading it.
+      // A file that can compare two values can compare anything, and then what an operator debugs
+      // is the file — so the loader refuses it rather than reading it.
       expect(
         () => load(
           '${head}answers:\n'

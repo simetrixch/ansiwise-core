@@ -11,9 +11,8 @@ import 'package:test/test.dart';
 /// back.
 ///
 /// WITHOUT THIS a step in that position could not use [FileStep] at all — `contentFor` must answer
-/// with text and there is no text that means "no file" — so it wrote its own check, plan and apply
-/// instead. Six steps of this platform's plugin did exactly that, which is eighteen methods
-/// differing from the mixin only in this one case.
+/// with text and there is no text that means "no file" — so it writes its own check, plan and apply
+/// instead: three methods per step, differing from the mixin only in this one case.
 void main() {
   FakeFiles files = FakeFiles();
 
@@ -96,8 +95,8 @@ void main() {
 
   group('a step that always has something to write', () {
     test('is unaffected by the second answer existing', () async {
-      // The ordinary case, which is most of them: a step that answers with text every time behaves
-      // exactly as it did when text was the only answer there was.
+      // The ordinary case, which is most of them: a step that answers with text every time is
+      // untouched by the second answer existing at all.
       expect(await const _Plain().check(contextOn(FakeFiles())), isA<Ready>());
       expect(await const _Plain().plan(contextOn(FakeFiles())), isA<DiffPlan>());
     });

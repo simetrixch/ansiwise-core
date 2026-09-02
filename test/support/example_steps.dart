@@ -510,9 +510,9 @@ final class NeedsItsValueToBeBuilt extends ObservingStep {
 ///
 /// IT THROWS EITHER AN [Exception] OR AN [Error], and the row ends in the same place both times:
 /// the first act wrote, the second stopped, and nothing has read what the machine holds now. What
-/// differs is which of the engine's catches the throw meets — an [Error] used to pass the catch
-/// beside the apply and the one at the top of `execute` alike, reaching the runner's last catch,
-/// which closes a record with no rows while the write stands.
+/// differs is which of the engine's catches the throw meets — an [Error] passes any catch that asks
+/// for an [Exception], beside the apply and at the top of `execute` alike, and reaches the runner's
+/// last catch, which closes a record with no rows while the write stands.
 final class ChangesThenItsApplyThrows extends ReversibleStep<String?> with FileStep {
   ChangesThenItsApplyThrows({required this.path, this.throwsAnError = false});
 
@@ -670,9 +670,9 @@ final class ThrowsWhileCapturing extends ReversibleStep<String?> with FileStep {
   /// Whether its capture throws an [Error] rather than an [Exception].
   ///
   /// The throw meets the catch at the top of `execute` either way — the capture runs outside the
-  /// try around the apply — and that catch used to ask for an [Exception], so an [Error] here left
-  /// the engine entirely and the run closed a record holding no rows about a step that had not yet
-  /// touched the machine.
+  /// try around the apply — and a catch there that asks for an [Exception] lets an [Error] out of
+  /// the engine entirely, closing a record holding no rows about a step that had not yet touched
+  /// the machine.
   final bool throwsAnError;
 
   @override
@@ -707,8 +707,9 @@ final class ThrowsWhileCapturing extends ReversibleStep<String?> with FileStep {
 ///
 /// The one throw that happens while a failed run is already cleaning up. Its apply is ordinary and
 /// its postcondition holds, so the row succeeds and the unwind reaches it in the normal way; what
-/// fails is putting the change back. An [Error] here used to leave the unwind loop entirely, so
-/// every step still to be taken back was left standing and the record closed with no rows.
+/// fails is putting the change back. Where the unwind loop's catch asks for an [Exception], an
+/// [Error] here leaves the loop entirely, every step still to be taken back is left standing, and
+/// the record closes with no rows.
 ///
 /// The shape a real one has: the tool the undo shells out to is gone by the time the undo runs,
 /// because an earlier step in the same unwind removed it.

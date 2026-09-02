@@ -111,13 +111,12 @@ final class Command {
 
   /// Describes a command that only looks at the machine.
   ///
-  /// **[elevated] IS ASKED HERE, and that is the whole reason this constructor changed shape.** It
-  /// used to take its arguments positionally, which meant it could not take a named flag beside
-  /// them — so it fixed elevation to false, and a caller writing "this only looks" got "and it runs
-  /// as you" without choosing it. That default was a limitation of the constructor, never a
-  /// decision, and it cost two steps on real machines: one asked sshd for its configuration and was
-  /// told Permission denied, the other asked a cluster whether it was running and waited fifteen
-  /// minutes for an answer it was not allowed to read.
+  /// **[elevated] IS ASKED HERE RATHER THAN FIXED TO FALSE.** A constructor taking its arguments
+  /// positionally cannot take a named flag beside them, so it has to fix elevation, and a caller
+  /// writing "this only looks" gets "and it runs as you" without choosing it. That is a limitation
+  /// of the constructor, never a decision, and it costs steps on real machines: one asks sshd for
+  /// its configuration and is told Permission denied, another asks a cluster whether it is running
+  /// and waits fifteen minutes for an answer it is not allowed to read.
   ///
   /// **Observing and elevated are independent.** Running as root does not make a command change
   /// anything — it makes it able to READ — so a check that has to read something only root may read

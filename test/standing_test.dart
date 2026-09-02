@@ -123,9 +123,9 @@ void main() {
     });
 
     test('keeps the whole run from reporting as fully proven', () async {
-      // THE PROPERTY THIS TICKET EXISTS FOR, and the reason the assertion is on a run with a
-      // measured row beside the declared one: a run that was declared THROUGHOUT would fail this
-      // too, and would not show that one bad row is enough.
+      // THE PROPERTY THIS EXISTS FOR, and the reason the assertion is on a run with a measured row
+      // beside the declared one: a run that was declared THROUGHOUT would fail this too, and would
+      // not show that one bad row is enough.
       final Harness h = Harness();
       final RunRecord record = await h.runner.run(
         program: resolve(<(String, OnFailure, List<String>)>[

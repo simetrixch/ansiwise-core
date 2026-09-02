@@ -6,15 +6,16 @@ import 'support/harness.dart';
 
 /// From which step a run cannot be taken back, said before it starts.
 ///
-/// The data was always there and nobody said it: every step answers whether it can be undone, and an
-/// operator reading thirty rows each carrying a flag has to find the boundary themselves. The moment
-/// they need it is the moment a run has gone wrong, which is the worst moment to be counting.
+/// The data is all there and no row says what it adds up to: every step answers whether it can be
+/// undone, and an operator reading thirty rows each carrying a flag has to find the boundary
+/// themselves. The moment they need it is the moment a run has gone wrong, which is the worst
+/// moment to be counting.
 ///
 /// TWO WAYS PAST THE LINE, and an operator is told which. A step may be irreversible by its own
 /// nature and then it says why; or the program may say `undo: false`, and then somebody decided so
-/// for this installation. The second is what this ticket added, and it moves the boundary exactly as
-/// the first does — which is the whole reason it has to be said before the run rather than at the
-/// moment an unwind reaches the step and stops.
+/// for this installation. The second moves the boundary exactly as the first does — which is the
+/// whole reason it has to be said before the run rather than at the moment an unwind reaches the
+/// step and stops.
 void main() {
   ResolvedProgram programWith(
     List<(String, OnFailure, List<String>)> entries, {

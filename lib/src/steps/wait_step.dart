@@ -28,11 +28,11 @@ base mixin WaitStep on Step {
   /// nothing.
   ///
   /// **`saw` is the difference between a timeout and a diagnosis.** A wait that reports only true or
-  /// false throws away the one thing the machine said: on the run this was written for, a cluster
-  /// answered within a second that a certificate authority had refused the mailbox by name, and the
-  /// step reported "waited 60s and it did not happen" — sending an operator to look at a service
-  /// that was working perfectly. Whatever the ask read instead of the answer belongs in `saw`,
-  /// trimmed to what an operator can act on, and null where there is genuinely nothing to add.
+  /// false throws away the one thing the machine said: a cluster answers within a second that a
+  /// certificate authority has refused the mailbox by name, the step reports "waited 60s and it did
+  /// not happen", and an operator is sent to look at a service that is working perfectly. Whatever
+  /// the ask read instead of the answer belongs in `saw`, trimmed to what an operator can act on,
+  /// and null where there is genuinely nothing to add.
   Future<({bool held, String? saw})> holds(StepContext context);
 
   /// Whether the wait is over, on a machine that may not carry what does the asking yet.

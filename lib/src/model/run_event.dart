@@ -12,9 +12,9 @@ import 'verdict.dart';
 /// exactly the same events in the same order. That is what lets a client that reconnected read on
 /// from the last sequence number it saw and miss nothing.
 ///
-/// Every event is attributed to the step that produced it. The old shell had to capture a byte
-/// stream and slice it by offset, because a command's own output escaped whatever logging function
-/// it was supposed to go through. Here there is no escape: a step reaches outside only through the
+/// Every event is attributed to the step that produced it. Where a command's own output escapes
+/// whatever logging function it is supposed to go through, the only way back is to capture a byte
+/// stream and slice it by offset. Here there is no escape: a step reaches outside only through the
 /// shell, file and network ports, and every one of them emits its event.
 @immutable
 sealed class RunEvent {

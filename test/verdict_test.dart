@@ -63,9 +63,9 @@ void main() {
     });
 
     test('a failure the run carried on past is reported at the end', () async {
-      // There used to be two ways of carrying on — one reported at the end and one not — and the
-      // difference between them was how loudly the failure was written down rather than what
-      // happened next. A run that walked past a failure and came back looking clean is the one
+      // There is ONE way of carrying on, and it is reported at the end. A second way that is not
+      // reported would differ only in how loudly the failure is written down rather than in what
+      // happens next. A run that walked past a failure and came back looking clean is the one
       // outcome this cannot produce, so every continued failure is in the closing line.
       final Harness h = Harness();
       final RunRecord record = await h.runner.run(

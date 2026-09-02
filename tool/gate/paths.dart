@@ -24,12 +24,12 @@ Directory packageOfToolScript(Uri script) => File.fromUri(script).parent.parent.
 
 /// The repository [start] sits in: the nearest directory at or above it holding `.git`.
 ///
-/// WHAT THIS IS FOR. The gate checks a REPOSITORY, and a repository is not a package. While this one
-/// held a single package the two were the same directory and the difference could not be seen — then
-/// a second package arrived, the gate went on walking the first, and it printed `every check green`
-/// with sixty-four files of the second never analysed, never formatted-checked and never run. A gate
-/// that cannot see half a repository and says every check is green is not a gap in coverage, it is a
-/// wrong answer in the shape of a right one.
+/// WHAT THIS IS FOR. The gate checks a REPOSITORY, and a repository is not a package. Where a
+/// repository holds a single package the two are the same directory and the difference cannot be
+/// seen; the moment a second package stands beside it, a gate that walks the package walks the
+/// first alone and prints `every check green` with every file of the second never analysed, never
+/// formatted-checked and never run. A gate that cannot see half a repository and says every check
+/// is green is not a gap in coverage, it is a wrong answer in the shape of a right one.
 ///
 /// Throws [StateError] when there is no `.git` above [start], because then there is no repository to
 /// check and every answer this gate could give would be about something else.

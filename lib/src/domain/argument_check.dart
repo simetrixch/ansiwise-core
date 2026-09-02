@@ -26,9 +26,9 @@ List<String> argumentProblems({
   final List<String> problems = <String>[];
   final Set<String> known = declared.map((ArgumentSpec s) => s.name).toSet();
 
-  // A name nothing implements is a REFUSAL and never a pass. It used to answer true with a comment
-  // saying the loader should have stopped it — so a shape that slipped past the loader was accepted
-  // for every value, and the run read exactly like one where every value had been checked.
+  // A name nothing implements is a REFUSAL and never a pass. Answering true and leaving it to the
+  // loader accepts every value for a shape that slipped past the loader, and the run then reads
+  // exactly like one where every value had been checked.
   bool checkShape(String shape, String text) {
     final ValueShape? known = ValueShape.named(shape);
     if (known == null) {
