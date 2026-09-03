@@ -418,6 +418,89 @@ void main() {
       expect(await store.events(id).toList(), hasLength(1));
     });
   });
+
+  group('reading only as far as the answer', () {
+    /// A run directory whose header is not a run header at all. Reading one throws, which is what
+    /// makes it a probe: a lookup that never reaches it is the only one that can answer.
+    Future<void> writeDamaged(String id) async {
+      final Directory dir = Directory(directory.of(RunId(id)));
+      await dir.create(recursive: true);
+      await File(directory.header(RunId(id))).writeAsString('this is not a run header');
+    }
+
+    // The ids carry the mint stamp, so they sort chronologically. Written out in full rather than
+    // generated, because which one is older than which is the whole subject here.
+    const String older = '20260807T110000Z-1-aaaaaaaa';
+    const String wanted = '20260807T120000Z-2-bbbbbbbb';
+    const String newer = '20260807T130000Z-3-cccccccc';
+
+    test('the gate stops at its proof and never reads what is older than it', () async {
+      // The store this measures against is one where reading everything CANNOT work: the older
+      // record would throw. So a lookup that answers at all has read only as far as its answer.
+      await writeDamaged(older);
+      await writeRun(wanted, start: noon, exitCode: 0);
+      final FileRunStore store = FileRunStore(directory: directory);
+
+      final RunRecord? proof = await store.lastCleanDryRun(
+        program: const ProgramName('deploy-something'),
+        fingerprint: 'a-digest',
+      );
+
+      expect(proof?.id.value, wanted);
+    });
+
+    test('a damaged header the gate DOES walk past is still refused, never skipped', () async {
+      // The counter-probe of the test above, and the reason it is here: an early stop that answered
+      // by ignoring what it could not read would pass that test while hiding real damage. A record
+      // NEWER than the proof stands between the walk and the answer, so it has to be met.
+      await writeRun(wanted, start: noon, exitCode: 0);
+      await writeDamaged(newer);
+      final FileRunStore store = FileRunStore(directory: directory);
+
+      expect(
+        store.lastCleanDryRun(
+          program: const ProgramName('deploy-something'),
+          fingerprint: 'a-digest',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test(
+      'a newer run that does not match is passed over, and the older proof is still found',
+      () async {
+        // The other way an early stop goes wrong: stopping at the first record rather than the first
+        // MATCHING one. The newest here is a clean dry run of the same program under a different
+        // fingerprint, which is exactly the shape a second attempt with changed answers leaves.
+        await writeRun(wanted, start: noon, exitCode: 0);
+        await writeRun(
+          newer,
+          start: noon.add(const Duration(hours: 1)),
+          fingerprint: 'another',
+          exitCode: 0,
+        );
+        final FileRunStore store = FileRunStore(directory: directory);
+
+        final RunRecord? proof = await store.lastCleanDryRun(
+          program: const ProgramName('deploy-something'),
+          fingerprint: 'a-digest',
+        );
+
+        expect(proof?.id.value, wanted);
+      },
+    );
+
+    test('a listing stops at its limit, and hands back what it read newest first', () async {
+      await writeDamaged(older);
+      await writeRun(wanted, start: noon, exitCode: 0);
+      await writeRun(newer, start: noon.add(const Duration(hours: 1)), exitCode: 0);
+      final FileRunStore store = FileRunStore(directory: directory);
+
+      final List<RunRecord> two = await store.list(limit: 2);
+
+      expect(two.map((RunRecord r) => r.id.value), <String>[newer, wanted]);
+    });
+  });
 }
 
 /// Waits for [ready] to become true, or gives up rather than hanging the whole suite.

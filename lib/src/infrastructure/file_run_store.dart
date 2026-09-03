@@ -46,8 +46,19 @@ final class FileRunStore implements RunStore {
       // `take` throws on a negative count, and a limit of nothing has one answer anyway.
       return const <RunRecord>[];
     }
-    final List<RunRecord> runs = await _headers(program: program, mode: mode);
-    return runs.length <= limit ? runs : runs.sublist(0, limit);
+    // Collected by name and then ordered by start, which is the order this answer has always had.
+    // The sort is over what was asked for rather than over the store, and the reading stops at the
+    // limit: a machine that has kept a hundred thousand runs answers a request for fifty by opening
+    // fifty headers.
+    final List<RunRecord> runs = <RunRecord>[];
+    await for (final RunRecord run in _headers(program: program, mode: mode)) {
+      runs.add(run);
+      if (runs.length == limit) {
+        break;
+      }
+    }
+    runs.sort(_newestFirst);
+    return runs;
   }
 
   @override
@@ -58,11 +69,14 @@ final class FileRunStore implements RunStore {
     required ProgramName program,
     required String fingerprint,
   }) async {
-    final List<RunRecord> runs = await _headers(program: program, mode: Mode.dry);
-    for (final RunRecord run in runs) {
-      // Newest first, so the first match is the most recent one. The test is the exit code and not
-      // [RunRecord.clean]: they agree — the runner returns 2 when a step reported an issue — and the
-      // exit code is the value the gate is defined in terms of.
+    // Newest first, so the first match is the most recent one, and the reading stops there. What it
+    // costs is the number of runs NEWER than the proof, which is what a dry run followed by its own
+    // real run makes small: on a machine that had kept 5322 records the gate's own read of them was
+    // measured at 11.8 seconds, and the run it was gating was minted one record after its proof.
+    //
+    // The test is the exit code and not [RunRecord.clean]: they agree — the runner returns 2 when a
+    // step reported an issue — and the exit code is the value the gate is defined in terms of.
+    await for (final RunRecord run in _headers(program: program, mode: Mode.dry)) {
       if (run.exitCode == 0 && run.fingerprint == fingerprint) {
         return run;
       }
@@ -128,20 +142,65 @@ final class FileRunStore implements RunStore {
     return events.stream;
   }
 
-  Future<List<RunRecord>> _headers({ProgramName? program, Mode? mode}) async {
+  /// Every matching run this store holds, newest first, ONE HEADER AT A TIME so a caller that has
+  /// what it came for stops the reading.
+  ///
+  /// **THE DIRECTORY NAME IS THE ORDER KEY, and that is what makes the early stop possible.** A run
+  /// is named for the moment it was minted, opening with the UTC stamp of that moment, so the names
+  /// sort chronologically without any header being opened. Sorting by what is INSIDE the headers
+  /// cannot order anything until every header has been read, which is the cost this exists to avoid.
+  ///
+  /// **IT IS NOT THE SAME ORDER AS BY START, and the difference is measurable.** A run's start is
+  /// never earlier than its mint, but the gap between the two is not equal for every run: a run
+  /// minted at 15:53:06 was measured starting at 15:53:17, while one minted four seconds after it
+  /// started at once. By name the second is newer; by start it is older. So a caller that owes its
+  /// reader an order by start sorts what it collected — over a handful of records, not the store.
+  Stream<RunRecord> _headers({ProgramName? program, Mode? mode}) async* {
     final Directory root = Directory(directory.root);
     if (!await root.exists()) {
-      return <RunRecord>[];
+      return;
     }
 
-    final List<RunRecord> runs = <RunRecord>[];
+    // The listing itself, and nothing opened yet. A name is all the ordering needs.
+    final List<String> names = <String>[];
     await for (final FileSystemEntity entry in root.list(followLinks: false)) {
-      if (entry is! Directory) {
-        continue;
+      if (entry is Directory) {
+        names.add(p.basename(entry.path));
       }
+    }
+
+    // A NAME THAT CARRIES NO STAMP IS OF UNKNOWN AGE, and one of those puts every name back in
+    // question: nothing outside its header says whether it is older or newer than the rest. An id
+    // is normally minted with its stamp, but `--run` takes one a caller chose, so this is a state
+    // the store can be handed rather than a state it can rule out. Where any name is like that,
+    // the order comes from the headers as it always did and the whole store is read; where none is,
+    // the names answer and the reading stops at the caller's answer.
+    if (names.any((String name) => !_stamped.hasMatch(name))) {
+      final List<RunRecord> all = <RunRecord>[];
+      for (final String name in names) {
+        final RunRecord? record = await _header(RunId(name));
+        if (record != null) {
+          all.add(record);
+        }
+      }
+      all.sort(_newestFirst);
+      for (final RunRecord record in all) {
+        if (program != null && record.program != program) {
+          continue;
+        }
+        if (mode != null && record.mode != mode) {
+          continue;
+        }
+        yield record;
+      }
+      return;
+    }
+    names.sort((String a, String b) => b.compareTo(a));
+
+    for (final String name in names) {
       // A directory with no header is not a run — something else put it here, or a run's directory
       // was made and the process died before it wrote anything. Either way there is nothing to list.
-      final RunRecord? record = await _header(RunId(p.basename(entry.path)));
+      final RunRecord? record = await _header(RunId(name));
       if (record == null) {
         continue;
       }
@@ -151,11 +210,8 @@ final class FileRunStore implements RunStore {
       if (mode != null && record.mode != mode) {
         continue;
       }
-      runs.add(record);
+      yield record;
     }
-
-    runs.sort(_newestFirst);
-    return runs;
   }
 
   Future<RunRecord?> _header(RunId id) async {
@@ -211,6 +267,10 @@ final class FileRunStore implements RunStore {
       await handle.close();
     }
   }
+
+  /// What a minted run id opens with: the UTC moment it was minted, to the second. It is the whole
+  /// of what lets names be ordered without opening anything.
+  static final RegExp _stamped = RegExp(r'^\d{8}T\d{6}Z-');
 
   static int _newestFirst(RunRecord a, RunRecord b) {
     final int byStart = b.start.compareTo(a.start);
