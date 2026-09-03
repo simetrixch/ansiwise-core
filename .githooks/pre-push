@@ -134,16 +134,26 @@ fi
 # issue tooling beside this checkout and is found by name whatever letter case the folder carries.
 # A push whose modes cannot be checked does not leave the machine.
 modes_check=""
-# The folder above is resolved before the siblings are read, so a refusal below names the script by
-# a path a person can copy rather than one with a dot-dot in the middle of it.
-parent="$(cd "$root/.." && pwd)" || exit 1
-for sibling in "$parent"/*/; do
+# THE SIBLINGS STAND BESIDE THE MAIN CHECKOUT, and this hook also runs from a worktree. An issue is
+# worked in a worktree under ../.worktrees/<repo>/, whose own parent directory holds nothing but
+# other worktrees, so a search beside the working tree finds no tooling there. The common git
+# directory is the main checkout's .git from either place, and it is what the neighbourhood is
+# measured from. Each found directory is resolved with cd, so a refusal below names a path a person
+# can copy rather than one with a dot-dot in the middle of it.
+common="$(git rev-parse --git-common-dir)" || exit 1
+case "$common" in
+  /*|[A-Za-z]:*) ;;
+  *) common="$root/$common" ;;
+esac
+main_checkout="$(cd "$common/.." && pwd)" || exit 1
+for sibling in "$main_checkout"/../*/; do
+  [ -d "$sibling" ] || continue
   case "$(basename "$sibling" | tr '[:upper:]' '[:lower:]')" in
-    simetrix-gh) modes_check="${sibling}bin/team-modes-check.sh" ;;
+    simetrix-gh) modes_check="$(cd "$sibling" && pwd)/bin/team-modes-check.sh" ;;
   esac
 done
 if [ -z "$modes_check" ]; then
-  echo "REFUSED: no checkout named simetrix-gh stands beside this one, so the team modes cannot be checked."
+  echo "REFUSED: no checkout named simetrix-gh stands beside $main_checkout, so the team modes cannot be checked."
   echo "It carries bin/team-modes-check.sh. Clone it beside this repository, then push again."
   exit 1
 fi
