@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../domain/clock.dart';
 import '../domain/recorder.dart';
+import '../domain/run_retention.dart';
 import '../engine/redactor.dart';
 import '../model/failures.dart';
 import '../model/names.dart';
@@ -14,6 +15,7 @@ import '../model/verdict.dart';
 import 'permissions.dart';
 import 'record_codec.dart';
 import 'run_directory.dart';
+import 'run_removal.dart';
 
 /// Writes a run's record to its directory: the header once at each end, the events one line at a
 /// time as they happen.
@@ -22,7 +24,14 @@ import 'run_directory.dart';
 /// port reports every write to a recorder, so a recorder writing its own file through it would
 /// record itself writing, and then record that.
 final class FileRecorder implements Recorder {
-  FileRecorder._(this.id, this._directory, this._clock, this._redactor, this._events);
+  FileRecorder._(
+    this.id,
+    this._directory,
+    this._clock,
+    this._redactor,
+    this._events,
+    this._retention,
+  );
 
   /// Opens the record of run [id] under [directory], creating the directory and the event file.
   ///
@@ -31,34 +40,26 @@ final class FileRecorder implements Recorder {
   /// run happens is hidden here too. A run with nothing to hide passes one built from no secrets
   /// rather than leaving it out, because a recorder that could be built without one is a recorder
   /// somebody builds without one.
+  ///
+  /// [retention] is how many records the machine this writes to keeps. It is applied by [save], and
+  /// what it never removes is in [RunRemoval].
   static Future<FileRecorder> open({
     required RunId id,
     required RunDirectory directory,
     required Clock clock,
     required Redactor redactor,
+    RunRetention retention = const RunRetention(),
   }) async {
     final String home = directory.of(id);
     await Directory(home).create(recursive: true);
-    await setPermissions(home, directoryMode);
+    await setPermissions(home, recordDirectoryMode);
 
     final String path = directory.events(id);
     final RandomAccessFile events = await File(path).open(mode: FileMode.append);
-    await setPermissions(path, fileMode);
+    await setPermissions(path, recordFileMode);
 
-    return FileRecorder._(id, directory, clock, redactor, events);
+    return FileRecorder._(id, directory, clock, redactor, events, retention);
   }
-
-  /// The permission bits the record's files get: 0644, so anyone on the machine may read them.
-  ///
-  /// That is only safe BECAUSE of the redaction below. An operator reads the record without elevated
-  /// rights and pastes it into a message, which is the whole reason it is world-readable — and the
-  /// moment a value reaches these files unredacted, the same bits are a leak. A change that lets one
-  /// through does not break anything that would notice.
-  static const int fileMode = 420;
-
-  /// The permission bits the run's directory gets: 0755, for the same reason and with the same
-  /// dependency on redaction.
-  static const int directoryMode = 493;
 
   /// The run being recorded.
   final RunId id;
@@ -67,6 +68,7 @@ final class FileRecorder implements Recorder {
   final Clock _clock;
   final Redactor _redactor;
   final RandomAccessFile _events;
+  final RunRetention _retention;
 
   static const RecordCodec _codec = RecordCodec();
 
@@ -131,6 +133,12 @@ final class FileRecorder implements Recorder {
   /// the last event is in the event file, which is what [close] finishes. This touches a different
   /// file, so a closed recorder still writes it.
   ///
+  /// **THE NUMBER OF RECORDS THE MACHINE KEEPS IS APPLIED HERE, WHICH IS WHY NO PROGRAM NAMES IT.**
+  /// Writing a header is the one thing every invocation of the engine does, and it is the first
+  /// moment this run is itself a record — counted against the bound, held out of it while it is
+  /// unfinished, and naming the run it resumes where it continues one. Applying the bound before
+  /// that would take a record while none of those three were readable.
+  ///
   /// Throws [HeaderNotReplaced] where the rename cannot be completed within [renameBudget].
   Future<void> save(RunRecord record) async {
     final String pending = _directory.pendingHeader(id);
@@ -139,8 +147,9 @@ final class FileRecorder implements Recorder {
       _headerFormat.convert(_codec.run(_redactedRecord(record, _redactor))),
       flush: true,
     );
-    await setPermissions(pending, fileMode);
+    await setPermissions(pending, recordFileMode);
     await _replaceHeaderWith(file);
+    await RunRemoval(directory: _directory, clock: _clock, retention: _retention).apply();
   }
 
   /// Puts [pending] where the header goes, retrying while the file system refuses.

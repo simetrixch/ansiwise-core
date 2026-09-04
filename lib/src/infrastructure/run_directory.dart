@@ -60,6 +60,23 @@ final class RunDirectory {
   /// one evening, and each diagnosis had to be reconstructed by running the child by hand.
   String startupLog(RunId id) => p.join(root, '${id.value}.startup.log');
 
+  /// Where this machine says what it has REMOVED to stay inside the records it keeps.
+  ///
+  /// **BESIDE THE RUNS AND NOT INSIDE ONE, because the runs it speaks of are gone.** A note written
+  /// into the record of the run that removed them would be removed itself a few hundred runs later,
+  /// and the reader who then finds the history starting somewhere is back to an absence that could
+  /// mean either "removed" or "never ran".
+  ///
+  /// It is a file and not a directory, so the listing that finds runs steps over it.
+  String get removals => p.join(root, 'removed.json');
+
+  /// The name the note is written under before it replaces the one that is there.
+  ///
+  /// Same reason as [pendingHeader]: a rewrite in place can be read while it is half done, and a
+  /// note that does not parse is a count nobody can read at the moment they are asking what
+  /// happened to a run.
+  String get pendingRemovals => p.join(root, 'removed.json.writing');
+
   /// The name the header is written under before it replaces the one that is there.
   ///
   /// A rewrite in place can be read while it is half done, and the store reads the header to find

@@ -138,6 +138,19 @@ final class RunRecord {
   /// proved something it did not.
   bool get fullyProven => waived.isEmpty && standings.fullyProven;
 
+  /// Orders two records with the newer one first, by when each began.
+  ///
+  /// **ONE ORDER FOR EVERYBODY WHO ORDERS RECORDS.** What a listing shows first and what a removal
+  /// keeps have to be the same records, and two comparators drift: the day one of them changed, the
+  /// machine would keep a set the operator's listing does not begin with.
+  ///
+  /// Two runs can begin within the same microsecond. The identifier breaks the tie so the order is
+  /// total, and a list read twice does not come back in a different order the second time.
+  static int newestFirst(RunRecord a, RunRecord b) {
+    final int byStart = b.start.compareTo(a.start);
+    return byStart != 0 ? byStart : b.id.value.compareTo(a.id.value);
+  }
+
   /// A copy of this record with the closing fields filled in.
   RunRecord closed({
     required DateTime end,

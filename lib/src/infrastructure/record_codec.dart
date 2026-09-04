@@ -3,6 +3,7 @@ import '../model/check_result.dart';
 import '../model/mode.dart';
 import '../model/names.dart';
 import '../model/on_failure.dart';
+import '../model/removed_runs.dart';
 import '../model/run_event.dart';
 import '../model/run_record.dart';
 import '../model/standings.dart';
@@ -204,6 +205,22 @@ final class RecordCodec implements RecordJson {
       _ => throw FormatException('there is no event kind called "$kind"'),
     };
   }
+
+  /// What the machine has removed, as the note beside the runs states it.
+  Map<String, Object?> removedRuns(RemovedRuns removed) => <String, Object?>{
+    'count': removed.count,
+    'oldest': removed.oldest.value,
+    'newest': removed.newest.value,
+    'at': _written(removed.at),
+  };
+
+  /// Reads back what [removedRuns] wrote.
+  RemovedRuns removedRunsFrom(Map<String, Object?> json) => RemovedRuns(
+    count: _number(json, 'count'),
+    oldest: RunId(_text(json, 'oldest')),
+    newest: RunId(_text(json, 'newest')),
+    at: _instant(json, 'at'),
+  );
 
   /// One step's row, as it sits inside a run.
   Map<String, Object?> stepRecord(StepRecord record) {

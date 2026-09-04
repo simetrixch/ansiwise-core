@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:yaml/yaml.dart';
 
 import '../domain/files.dart';
+import '../domain/run_retention.dart';
 import '../model/failures.dart';
 import '../model/names.dart';
 import '../model/run_event.dart';
@@ -24,6 +25,8 @@ import 'elevation_source.dart';
 /// log_level: info
 /// gate:
 ///   dry: false
+/// runs:
+///   keep: 500
 /// plugins:
 ///   - example-plugin
 /// conditions:
@@ -42,6 +45,7 @@ final class Configuration {
     this.logLevel = LogLevel.info,
     this.requireDryRun = true,
     this.allowUnwind = true,
+    this.retention = const RunRetention(),
     this.conditions = const <String, ConditionBinding>{},
     this.elevation,
   });
@@ -69,6 +73,17 @@ final class Configuration {
   /// it may decide differently; the run that is supposed to demonstrate the chain works waives
   /// nothing.
   final bool requireDryRun;
+
+  /// How many run records this machine keeps.
+  ///
+  /// [RunRetention.defaultKeep] unless `runs: keep:` says otherwise, so an installation that never
+  /// thought about it is still bounded. Nothing removed a record before this existed, so the number
+  /// a machine held was the number of invocations it had ever had — which a program on a timer turns
+  /// into a disk that fills.
+  ///
+  /// **Stated once here and obeyed by every program.** A program file cannot name it, and no step
+  /// knows there is a bound: the engine applies it where a record is opened.
+  final RunRetention retention;
 
   /// Whether the engine should roll back steps when a failure happens.
   ///
@@ -139,6 +154,7 @@ final class Configuration {
       logLevel: _logLevel(document, path),
       requireDryRun: _requireDryRun(document, path),
       allowUnwind: _allowUnwind(document, path),
+      retention: _retention(document, path),
       conditions: _conditions(document, path),
       elevation: _elevation(document, path),
     );
@@ -334,6 +350,34 @@ final class Configuration {
       );
     }
     return dry;
+  }
+
+  /// How many run records `runs: keep:` says this machine keeps, or the default where it says
+  /// nothing.
+  ///
+  /// A whole number of at least one, and nothing else. Zero is refused rather than read as "keep
+  /// none": a machine that removed the record of the run that is happening could not be asked what
+  /// that run did.
+  static RunRetention _retention(YamlMap document, String path) {
+    final Object? runs = document['runs'];
+    if (runs == null) {
+      return const RunRetention();
+    }
+    if (runs is! YamlMap) {
+      throw PluginRejected('$path: "runs" has to be a mapping, with "keep:" under it');
+    }
+    final Object? keep = runs['keep'];
+    if (keep == null) {
+      return const RunRetention();
+    }
+    if (keep is! int || keep < 1) {
+      throw PluginRejected(
+        '$path: "runs.keep" is "$keep", and it is a whole number of at least one\n'
+        'it is how many run records this machine keeps: the oldest beyond it are removed as each '
+        'run starts, apart from a run that has not finished and a run another record resumes',
+      );
+    }
+    return RunRetention(keep);
   }
 
   /// Whether `no_unwind:` disables the rollback of steps after a failure.

@@ -311,6 +311,71 @@ void main() {
         );
       });
     });
+
+    group('the run records it keeps', () {
+      // The one place an installation states how many, so no program names it and every program is
+      // held to it. Before this existed nothing removed a record anywhere, and the number a machine
+      // held was the number of invocations it had ever had.
+
+      test('is the default where the file says nothing at all', () async {
+        expect((await read('plugins:\n  - one\n')).retention, const RunRetention());
+      });
+
+      test('is the default where a runs block says nothing about it', () async {
+        expect(
+          (await read('runs:\n  something_else: 3\nplugins:\n  - one\n')).retention,
+          const RunRetention(),
+        );
+      });
+
+      test('is the number the file names', () async {
+        expect(
+          (await read('runs:\n  keep: 20\nplugins:\n  - one\n')).retention,
+          const RunRetention(20),
+        );
+      });
+
+      test('a bound of none is refused, saying what the number is', () {
+        // Not read as "keep nothing": a machine that removed the record of the run happening on it
+        // could not be asked what that run did.
+        expect(
+          read('runs:\n  keep: 0\nplugins:\n  - one\n'),
+          throwsA(
+            isA<PluginRejected>().having(
+              (PluginRejected refused) => refused.message,
+              'message',
+              allOf(contains('runs.keep'), contains('at least one'), contains('run records')),
+            ),
+          ),
+        );
+      });
+
+      test('a value that is not a whole number is refused rather than coerced', () {
+        expect(
+          read('runs:\n  keep: many\nplugins:\n  - one\n'),
+          throwsA(
+            isA<PluginRejected>().having(
+              (PluginRejected refused) => refused.message,
+              'message',
+              allOf(contains('runs.keep'), contains('many')),
+            ),
+          ),
+        );
+      });
+
+      test('a runs entry that is not a mapping is refused rather than read past', () {
+        expect(
+          read('runs: 20\nplugins:\n  - one\n'),
+          throwsA(
+            isA<PluginRejected>().having(
+              (PluginRejected refused) => refused.message,
+              'message',
+              contains('"runs" has to be a mapping'),
+            ),
+          ),
+        );
+      });
+    });
   });
 }
 

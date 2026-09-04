@@ -57,7 +57,7 @@ final class FileRunStore implements RunStore {
         break;
       }
     }
-    runs.sort(_newestFirst);
+    runs.sort(RunRecord.newestFirst);
     return runs;
   }
 
@@ -183,7 +183,7 @@ final class FileRunStore implements RunStore {
           all.add(record);
         }
       }
-      all.sort(_newestFirst);
+      all.sort(RunRecord.newestFirst);
       for (final RunRecord record in all) {
         if (program != null && record.program != program) {
           continue;
@@ -271,13 +271,6 @@ final class FileRunStore implements RunStore {
   /// What a minted run id opens with: the UTC moment it was minted, to the second. It is the whole
   /// of what lets names be ordered without opening anything.
   static final RegExp _stamped = RegExp(r'^\d{8}T\d{6}Z-');
-
-  static int _newestFirst(RunRecord a, RunRecord b) {
-    final int byStart = b.start.compareTo(a.start);
-    // Two runs can begin within the same microsecond. The identifier breaks the tie so the order is
-    // total, and a list read twice does not come back in a different order the second time.
-    return byStart != 0 ? byStart : b.id.value.compareTo(a.id.value);
-  }
 }
 
 /// The complete lines read out of the event file, and where reading stopped.
