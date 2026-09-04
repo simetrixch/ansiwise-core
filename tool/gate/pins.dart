@@ -11,7 +11,7 @@ library;
 
 /// The Dart SDK the checks are true against, and the only tool the gate starts.
 ///
-/// The source is the workstation itself: `dart --version` answers 3.13.1 (stable). A toolchain that
+/// The source is the workstation itself: `dart --version` answers 3.13.2 (stable). A toolchain that
 /// moves under the pin makes this guard refuse every run, which is the guard working rather than
 /// failing.
 ///
@@ -20,4 +20,4 @@ library;
 /// uses: releases then get cut on `dart test` alone, which is a subset of what this gate asks. The
 /// build workflow takes its SDK from THIS constant, so raising it moves the machine and the build
 /// together rather than splitting them.
-const String dartVersion = '3.13.1';
+const String dartVersion = '3.13.2';
