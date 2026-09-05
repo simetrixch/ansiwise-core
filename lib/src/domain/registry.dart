@@ -45,6 +45,7 @@ final class RegisteredStep {
     this.arguments = const <ArgumentSpec>[],
     this.answers = const <String>[],
     this.publishes = const <MeasurementSpec>[],
+    this.gatedOn = const <Sidedness>[],
   });
 
   /// The name a program file writes.
@@ -79,6 +80,45 @@ final class RegisteredStep {
   /// wiring no resolution could have checked, so the sink the engine hands it refuses a name that
   /// is not here.
   final List<MeasurementSpec> publishes;
+
+  /// Which side of each opposing pair of conditions this step may be gated on.
+  ///
+  /// A condition that names an opposite is half of a pair: two registered names over one reading,
+  /// answering it both ways. A row gated on the wrong half of such a pair is a program that resolves,
+  /// plans and reports every check green, because the row simply does not run — and the first honest
+  /// answer comes from the machine. What is missing is the other half of the knowledge: the pairing
+  /// says the two are opposites, and this says which of them this step belongs under.
+  ///
+  /// Empty means this step stands under no declared pair at all. A step gated on one anyway is
+  /// refused when the program is resolved, so a step that may genuinely run on either side says
+  /// [Sidedness.either] and there is no way to leave it unsaid.
+  final List<Sidedness> gatedOn;
+}
+
+/// One opposing pair of conditions, and which side of it a step may be gated on.
+///
+/// The pair is named by ONE of its two members, because either of them leads to the other: the
+/// registered condition names its opposite. A step of a plugin therefore writes the name that plugin
+/// registered, never the name an installation chose for a use of it.
+@immutable
+final class Sidedness {
+  /// This step may run where [predicate] holds, and never where the opposite of it does.
+  const Sidedness.only(this.predicate) : eitherSide = false;
+
+  /// This step may run on both sides of the pair [predicate] belongs to.
+  ///
+  /// For a step whose side is decided by what its row points it at rather than by what the step
+  /// does. It is written out rather than left unsaid so a reader can tell it from a step nobody has
+  /// thought about.
+  const Sidedness.either(this.predicate) : eitherSide = true;
+
+  /// One member of the pair, as the plugin that brought the condition registered it.
+  ///
+  /// For [Sidedness.only] it is also the side, which is why one name says both things.
+  final PredicateName predicate;
+
+  /// Whether both sides of that pair are allowed.
+  final bool eitherSide;
 }
 
 /// One predicate, as the registry holds it.
@@ -100,10 +140,12 @@ final class RegisteredPredicate {
     required this.source,
     required Predicate predicate,
     required this.describes,
+    this.opposite,
   }) : _instance = predicate,
        _factory = null,
        arguments = const <ArgumentSpec>[],
-       bound = Arguments.none;
+       bound = Arguments.none,
+       generic = name;
 
   /// The result of pointing a generic condition at what one installation wants it to look at.
   const RegisteredPredicate._bound({
@@ -112,6 +154,8 @@ final class RegisteredPredicate {
     required Predicate predicate,
     required this.describes,
     required this.bound,
+    required this.generic,
+    required this.opposite,
   }) : _instance = predicate,
        _factory = null,
        arguments = const <ArgumentSpec>[];
@@ -128,12 +172,36 @@ final class RegisteredPredicate {
     required Predicate Function(Arguments values) create,
     required this.describes,
     required this.arguments,
+    this.opposite,
   }) : _instance = null,
        _factory = create,
-       bound = Arguments.none;
+       bound = Arguments.none,
+       generic = name;
 
   /// The name a program file writes behind `when:`.
   final PredicateName name;
+
+  /// The registered condition this is a use of, which for everything but a bound one is itself.
+  ///
+  /// A generic condition is registered under the plugin's name and reaches a program row under the
+  /// name the installation's configuration chose for it, so [name] alone cannot say what the
+  /// condition READS. Everything that reasons about the condition rather than about this one use of
+  /// it — above all which side of an opposing pair it answers — is asked of this.
+  final PredicateName generic;
+
+  /// The registered condition that answers the opposite reading of the same fact, or null.
+  ///
+  /// TWO REGISTERED NAMES OVER ONE READING is how this framework writes a negation: a `not:` behind
+  /// `when:` would be an operator, and an operator is where a program file starts being a language.
+  /// The cost of two names is that a row can be gated on the wrong one of them and every check stays
+  /// green, because the row is simply skipped. Naming the opposite here is what makes that
+  /// answerable: with the pair declared, a step says which half it belongs under
+  /// ([RegisteredStep.gatedOn]) and the resolver refuses the other one.
+  ///
+  /// Both halves name each other, and a pair declared in one direction only is refused when the
+  /// plugins are composed — a swap caught in one direction and not the other is worse than none,
+  /// because the green run reads as proof.
+  final PredicateName? opposite;
 
   /// Where the class is defined, as `path:line` relative to the repository root.
   final String source;
@@ -164,6 +232,10 @@ final class RegisteredPredicate {
     predicate: _factory!(values),
     describes: describes,
     bound: values,
+    // Carried, or the pairing a plugin declared would be lost at exactly the moment the condition
+    // becomes something a program row can name — which is the only moment it is any use.
+    generic: name,
+    opposite: opposite,
   );
 
   /// What this condition was told, kept so the fingerprint can state it.

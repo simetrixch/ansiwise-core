@@ -138,6 +138,9 @@ final class ProgramResolver {
           );
           continue;
         }
+        if (_wrongSide(registered, predicate) case final String refusal) {
+          problems.add('$where: $refusal');
+        }
         when.add(predicate);
       }
 
@@ -199,6 +202,54 @@ final class ProgramResolver {
       throw ProgramInvalid(problems.join('\n'), where: program.name.value);
     }
     return ResolvedProgram(declared: program, steps: resolved);
+  }
+
+  /// Why [registered] may not be gated on [condition], or null where it may.
+  ///
+  /// **THE ONE THING A CHECK COULD NOT ASK UNTIL THE PAIRING WAS DECLARED.** Two registered names
+  /// over one reading are how this framework writes a negation, and a row gated on the wrong one of
+  /// them resolves, plans and reports every check green: the row is simply skipped, and the first
+  /// honest answer comes from the machine. With the pair declared beside the predicate and the side
+  /// declared beside the step, the swap is a refusal here, in the same list as an argument of the
+  /// wrong kind.
+  ///
+  /// A step that says NOTHING about a pair it is gated on is refused as well. The alternative is
+  /// that silence means "either side", and then a rule everything can opt out of by saying nothing
+  /// holds nothing.
+  String? _wrongSide(RegisteredStep registered, RegisteredPredicate condition) {
+    if (condition.opposite case final PredicateName opposite) {
+      // The condition as the program row names it, and what it READS where an installation gave one
+      // use of a generic condition a name of its own. The reader has to be sent to both: the name is
+      // in the program file, the pairing is in the plugin.
+      final String said = condition.name == condition.generic
+          ? '"${condition.name}"'
+          : '"${condition.name}" reads "${condition.generic}"';
+
+      Sidedness? side;
+      for (final Sidedness each in registered.gatedOn) {
+        if (each.predicate == condition.generic || each.predicate == opposite) {
+          side = each;
+          break;
+        }
+      }
+      if (side == null) {
+        return '$said, one side of the opposing pair "${condition.generic}" and "$opposite", and '
+            'this step does not say which side of that pair it may run on';
+      }
+      if (side.eitherSide || side.predicate == condition.generic) {
+        return null;
+      }
+      // Which name the operator is meant to write instead. The step names the plugin's condition,
+      // the program file names the installation's, and only the registry holds both — so a refusal
+      // that stopped at the plugin's name would send them looking in a file that does not carry it.
+      final List<String> instead = <String>[
+        for (final RegisteredPredicate each in registry.predicates.values)
+          if (each.generic == opposite && !each.takesArguments) each.name.value,
+      ]..sort();
+      return '$said, and this step may run only where "$opposite" holds'
+          '${instead.isEmpty ? '' : ' — gate this row on ${instead.join(' or ')}'}';
+    }
+    return null;
   }
 
   /// [entry] with every program-wide default it takes written into its arguments.

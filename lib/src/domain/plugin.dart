@@ -105,6 +105,34 @@ final class PluginSet {
       }
     }
 
+    final Map<PredicateName, RegisteredPredicate> predicates = <PredicateName, RegisteredPredicate>{
+      for (final Plugin plugin in chosen) ...plugin.registry.predicates,
+    };
+
+    // A PAIR IS DECLARED FROM BOTH SIDES OR IT IS NOT DECLARED. A condition naming an opposite that
+    // does not name it back holds the swap in one direction only: gate the row for the first half on
+    // the second and the resolver refuses it, gate the row for the second half on the first and it
+    // passes. Half a guard is worse than none here, because the run that passes reads as proof.
+    for (final RegisteredPredicate each in predicates.values) {
+      if (each.opposite case final PredicateName opposite) {
+        final RegisteredPredicate? other = predicates[opposite];
+        if (other == null) {
+          problems.add(
+            'the condition "${each.name}" names "$opposite" as its opposite, and no active plugin '
+            'registers that name',
+          );
+          continue;
+        }
+        if (other.opposite != each.name) {
+          problems.add(
+            'the condition "${each.name}" names "$opposite" as its opposite, and "$opposite" names '
+            '${other.opposite == null ? 'none' : '"${other.opposite}"'} — name each other, or a '
+            'row gated on the wrong half of the pair is refused in one direction only',
+          );
+        }
+      }
+    }
+
     if (problems.isNotEmpty) {
       throw PluginRejected(problems.join('\n'));
     }
@@ -113,9 +141,7 @@ final class PluginSet {
       steps: <StepName, RegisteredStep>{
         for (final Plugin plugin in chosen) ...plugin.registry.steps,
       },
-      predicates: <PredicateName, RegisteredPredicate>{
-        for (final Plugin plugin in chosen) ...plugin.registry.predicates,
-      },
+      predicates: predicates,
     );
   }
 }
