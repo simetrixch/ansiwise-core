@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 
 import '../model/failures.dart';
 import '../model/names.dart';
+import 'arguments.dart';
 import 'registry.dart';
 
 /// What this framework can be taught, and the only way it learns anything about a particular world.
@@ -102,6 +103,27 @@ final class PluginSet {
     for (final MapEntry<String, List<String>> entry in predicateClaimants.entries) {
       if (entry.value.length > 1) {
         problems.add('the predicate "${entry.key}" is brought by ${entry.value.join(' and ')}');
+      }
+    }
+
+    // A WHOLE NUMBER SAYS WHAT IT CAN MEAN, OR THE BINARY IS REFUSED. Every check binds an
+    // argument's kind and never its value, so a memory floor of one kilobyte, a file mode of 0777
+    // and a timeout of one second are all accepted until the machine answers. A band is the
+    // argument's own statement of what its number can plausibly stand for; an argument that has none
+    // says so with IntegerBand.none and its reason. Refused here rather than left optional, because
+    // a band nobody has to declare is a band nobody declares, and silence and "any number will do"
+    // then look identical to every reader.
+    for (final Plugin plugin in chosen) {
+      for (final RegisteredStep step in plugin.registry.steps.values) {
+        for (final ArgumentSpec spec in step.arguments) {
+          if (spec.kind == ArgumentKind.integer && spec.band == null) {
+            problems.add(
+              'the step "${step.name}" declares the whole number "${spec.name}" and says nothing '
+              'about what it can plausibly mean — give it an IntegerBand, or state IntegerBand.none '
+              'with the reason there is no plausible band',
+            );
+          }
+        }
       }
     }
 

@@ -92,6 +92,16 @@ List<String> argumentProblems({
       }
     }
 
+    // WHAT THE NUMBER CAN MEAN, asked here because the three declarations beside it hold text and
+    // only text, so until now the kind was the whole check for a whole number. A band says what the
+    // value can plausibly stand for and never what the platform requires, which is why it belongs to
+    // the argument and not to the program row that writes the figure.
+    if (spec.band case final IntegerBand band when value is int) {
+      if (band.refuses(value) case final String wrong) {
+        problems.add('$where: "${spec.name}" $wrong');
+      }
+    }
+
     // Asked only once the kind is right: "holds one of master, slave" said about an int would be
     // true and useless.
     if (!spec.permits(value)) {

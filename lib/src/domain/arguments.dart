@@ -167,6 +167,59 @@ final class StatedWhen {
   final String predicate;
 }
 
+/// What a whole number can plausibly MEAN, declared beside the argument that has the meaning.
+///
+/// **A BAND IS NOT A LIMIT.** It says what the number can plausibly stand for, never what this
+/// platform requires. A floor on the memory of a machine that accepts three gigabytes and refuses
+/// one is doing its whole job; whether four or eight is the right size for a product is a decision
+/// somebody makes in a program file, where a person can read it. A band written as the number it
+/// means refuses the values it means to accept — a machine's memory is compared against what the
+/// kernel leaves after its own reservations, which is several per cent short of the size printed on
+/// the part.
+///
+/// **[because] is required on both constructors**, so an edge is a sentence rather than a number
+/// somebody typed. A refusal that fires on a legitimate value is widened in a hurry and then means
+/// nothing, and the person widening it has to disagree with the reason rather than only with the
+/// figure.
+@immutable
+final class IntegerBand {
+  /// States the two edges of what this number can plausibly mean, and why they are where they are.
+  ///
+  /// Both edges, because an argument whose upper edge nobody can name is one nobody has thought
+  /// about all the way through: a timeout of a thousand million seconds is not a long timeout, it is
+  /// a value nobody meant.
+  const IntegerBand.between({required this.least, required this.most, required this.because});
+
+  /// States that this number has no plausible band at all, and why there is none.
+  ///
+  /// Written out rather than left off, because nothing can tell an argument whose value genuinely
+  /// may be anything from one nobody has looked at, and the two are treated identically by every
+  /// check that reads only the kind.
+  const IntegerBand.none({required this.because}) : least = null, most = null;
+
+  /// The lowest value that can plausibly be meant, or null where there is no such value.
+  final int? least;
+
+  /// The highest value that can plausibly be meant, or null where there is no such value.
+  final int? most;
+
+  /// Why the edges are where they are, or why there are none.
+  final String because;
+
+  /// What is wrong with [value] against this band, in the words a refusal uses, or null.
+  String? refuses(int value) {
+    final int? low = least;
+    final int? high = most;
+    if (low == null || high == null) {
+      return null;
+    }
+    if (value >= low && value <= high) {
+      return null;
+    }
+    return 'holds a whole number from $low to $high, and was given $value — $because';
+  }
+}
+
 /// One argument a step accepts, declared by the step and checked before anything runs.
 ///
 /// This is where the safety a compiler cannot give across a configuration boundary is restored. A
@@ -185,6 +238,7 @@ final class ArgumentSpec {
     this.defaultValue,
     this.allowed = const <String>[],
     this.shape,
+    this.band,
     this.denied = const <String>[],
     this.statedWhen,
     this.derivation,
@@ -242,6 +296,19 @@ final class ArgumentSpec {
 
   /// A specific shape a text value must have, such as a hostname or a mailbox.
   final String? shape;
+
+  /// What this whole number can plausibly mean, or null where nothing has been said about it.
+  ///
+  /// The three declarations above hold TEXT and only text — `allowed` is a closed set of words,
+  /// `denied` a list of them, `shape` a grammar — so for a number the kind was the whole check and a
+  /// memory floor of one kilobyte, a file mode of 0777 and a timeout of one second were each
+  /// accepted by everything before the machine.
+  ///
+  /// Null is what nobody has said anything about, and a step registered with one is refused when the
+  /// plugins are composed. An argument whose value genuinely may be any whole number states
+  /// [IntegerBand.none] with the reason, which is what makes "there is no plausible band" tellable
+  /// from "nobody looked".
+  final IntegerBand? band;
 
   /// Values this argument must never hold, even if they are of the right kind.
   final List<String> denied;
