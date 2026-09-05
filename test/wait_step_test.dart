@@ -7,14 +7,13 @@ import 'package:test/test.dart';
 /// A wait put to a machine that cannot answer it yet.
 ///
 /// **Why this file exists.** A wait is always on something an earlier step brings about, so the tool
-/// it asks with is regularly not on the machine when the question is first put. That case reached
-/// the shell as an exception and escaped: the step neither held nor failed, it disappeared, and the
-/// run stopped on a stack trace where the truthful answer was "not yet".
+/// it asks with is regularly not on the machine when the question is first put. Left to reach the
+/// shell as an exception it escapes: the step neither holds nor fails, it disappears, and the run
+/// stops on a stack trace where the truthful answer is "not yet".
 ///
-/// It was found on a real machine and could not have been found anywhere else. A fake shell answers
-/// an argv without the executable needing to exist, so every suite was green over a program that
-/// stopped at its fourth step of fifty-five — in the mode whose whole purpose is to measure a machine
-/// before anything is done to it.
+/// No suite catches that. A fake shell answers an argv without the executable needing to exist, so
+/// a suite is green over a program that stops at its fourth step of fifty-five — in the mode whose
+/// whole purpose is to measure a machine before anything is done to it.
 void main() {
   test('a wait whose tool is not on the machine is not over, and does not throw', () async {
     final CheckResult answer = await const _WaitsForTheAbsent().check(_machine());

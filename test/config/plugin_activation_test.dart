@@ -314,8 +314,8 @@ void main() {
 
     group('the run records it keeps', () {
       // The one place an installation states how many, so no program names it and every program is
-      // held to it. Before this existed nothing removed a record anywhere, and the number a machine
-      // held was the number of invocations it had ever had.
+      // held to it. Unbounded, the number a machine holds is the number of invocations it has ever
+      // had.
 
       test('is the default where the file says nothing at all', () async {
         expect((await read('plugins:\n  - one\n')).retention, const RunRetention());

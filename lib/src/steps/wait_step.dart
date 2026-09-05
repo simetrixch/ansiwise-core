@@ -42,10 +42,10 @@ base mixin WaitStep on Step {
   /// is not a measurement: the step neither holds nor fails, it disappears — and the run stops on a
   /// stack trace where the truthful answer was "not yet, and here is why".
   ///
-  /// It was found the only way it could be: on a real machine carrying nothing yet. A program of
-  /// fifty-five steps stopped at the fourth, asking with a tool the third step installs — in the mode
-  /// whose whole purpose is to measure a machine before anything is done to it. No suite saw it,
-  /// because a fake shell answers an argv without needing the executable to exist.
+  /// No suite sees this, because a fake shell answers an argv without needing the executable to
+  /// exist. It shows on a real machine carrying nothing yet: a program stops at its fourth step,
+  /// asking with a tool the third step installs — in the mode whose whole purpose is to measure a
+  /// machine before anything is done to it.
   ///
   /// The absence is carried rather than swallowed: the ask returns why, and the failure at the
   /// deadline says it instead of "did not answer in time", which would send an operator looking at a

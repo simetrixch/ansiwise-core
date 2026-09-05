@@ -452,9 +452,8 @@ final class Arguments {
 /// REACHED, never whether anything changes.
 ///
 /// A step declares it by putting this in its own argument list, carries it as a field, and passes it
-/// to every call it makes. Passing it to some and not others is the failure that cost twelve machine
-/// runs to find five occurrences of: the call the row is obviously about carried it, and the backup
-/// written beside it did not.
+/// to every call it makes. Passing it to some calls and not others is the failure to look for: the
+/// call the row is obviously about carries it, and the backup written beside it does not.
 const ArgumentSpec elevationArgument = ArgumentSpec(
   name: 'elevated',
   kind: ArgumentKind.flag,

@@ -156,18 +156,17 @@ final class RealShell implements Shell {
 
 /// What `sudo` is given so that [command] runs as root AND sees the variables it was promised.
 ///
-/// Named and separate because it is a decision rather than plumbing, and a decision nothing could
-/// assert until it had a name: every test of an elevated command started a real process or nothing
-/// at all.
+/// Named and separate because it is a decision rather than plumbing, and a decision with no name of
+/// its own can only be asserted by starting a real process.
 ///
 /// **`env` appears wherever the command carries variables, and only then.** sudo resets the
 /// environment it passes on — that is its purpose, and asking an installation to weaken it in its
 /// sudoers would trade a real guarantee for a convenience. So the variables are set on the far side
 /// of that reset: `env` runs as root, sets them, and execs the command.
 ///
-/// Measured before this existed: a package install passed its own "do not ask me anything" and ran
-/// as root, the variable was stripped, and apt was one config-file question away from stopping an
-/// unattended run at a prompt nobody would ever answer.
+/// Without it a package install passes its own "do not ask me anything", runs as root with the
+/// variable stripped, and apt is one config-file question away from stopping an unattended run at a
+/// prompt nobody will ever answer.
 List<String> elevatedArgumentsFor(Command command) => <String>[
   ...RealShell.elevatedPrefix,
   if (command.environment.isNotEmpty) ...<String>[

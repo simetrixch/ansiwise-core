@@ -700,16 +700,14 @@ void main() {
   });
 
   group('a run past its point of no return', () {
-    // MEASURED ON A REAL INSTALLATION. A run said before it started that from step 8 of 88 it could
-    // not be taken back, because what that step installs leaves the data it wrote behind. The run
-    // failed at step 13, and its unwind then deleted the thing that data sat inside — made four
-    // steps earlier, and reversible. So the data did not stay behind, and the record said two
-    // things that cannot both be true: that the step was not taken back, and that what its data
-    // lived in was.
+    // THE SHAPE THIS REPRODUCES. A run announces before it starts that from one step on it cannot
+    // be taken back, because what that step installs leaves the data it wrote behind. A later step
+    // fails, and an unwind that walked past the boundary would delete the reversible directory that
+    // data sits inside, made earlier in the same run. The record would then say two things that
+    // cannot both be true: that the step was not taken back, and that what its data lived in was.
     //
-    // Nothing there was a step behaving badly. The step that could not be taken back stated its
-    // limit correctly and the earlier one deleted exactly what it had made. It is the composition
-    // that was wrong.
+    // Neither step behaves badly. The one that cannot be taken back states its limit correctly and
+    // the earlier one deletes exactly what it made. It is the composition that is wrong.
 
     ResolvedProgram aDirectoryThenSomethingIrreversibleInIt() =>
         ProgramResolver(

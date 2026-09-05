@@ -312,9 +312,9 @@ final class StepExecution {
   ///
   /// **A check that could not be PERFORMED is BLOCKED, not a crash.** A step measures the machine
   /// with a tool, and on the machine this whole mode exists for — one where nothing has been done
-  /// yet — that tool is regularly what an earlier step installs. Reaching for it throws, and the
-  /// throw carried the step away entirely: no verdict, no plan, a run ended on a stack trace where
-  /// the truthful answer was "I cannot measure this yet, and here is what is missing".
+  /// yet — that tool is regularly what an earlier step installs. Reaching for it throws, and an
+  /// uncaught throw carries the step away entirely: no verdict, no plan, a run ending on a stack
+  /// trace where the truthful answer is "I cannot measure this yet, and here is what is missing".
   ///
   /// Blocked is exactly that answer, and it is already the verdict the rest of this method knows how
   /// to read: a step that verifies an earlier one reports what it WOULD check, and one that measures
@@ -331,8 +331,8 @@ final class StepExecution {
   /// top of [execute] — which carries no applied step, so a row that had written would never be
   /// unwound.
   ///
-  /// Found on a real machine and findable nowhere else: a fake shell answers an argv without the
-  /// executable needing to exist, so a suite is green over a program that stops at its fourth step.
+  /// No suite finds this: a fake shell answers an argv without the executable needing to exist, so
+  /// a suite is green over a program that stops at its fourth step.
   ///
   /// **WHETHER THE STEP ANSWERED COMES BACK BESIDE THE ANSWER.** Blocked says two different things —
   /// the step answered that a precondition is missing, or the step never answered and the engine

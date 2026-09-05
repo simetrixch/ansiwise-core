@@ -77,9 +77,8 @@ final class Configuration {
   /// How many run records this machine keeps.
   ///
   /// [RunRetention.defaultKeep] unless `runs: keep:` says otherwise, so an installation that never
-  /// thought about it is still bounded. Nothing removed a record before this existed, so the number
-  /// a machine held was the number of invocations it had ever had — which a program on a timer turns
-  /// into a disk that fills.
+  /// thought about it is still bounded. Without a bound the number a machine holds is the number of
+  /// invocations it has ever had, which a program on a timer turns into a disk that fills.
   ///
   /// **Stated once here and obeyed by every program.** A program file cannot name it, and no step
   /// knows there is a bound: the engine applies it where a record is opened.

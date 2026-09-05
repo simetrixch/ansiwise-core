@@ -3,8 +3,8 @@ import 'package:ansiwise_checks_tree/audits.dart';
 /// naming — the abolished words appear in no name of THIS repository.
 ///
 /// WHAT WAS ABOLISHED IS A PROGRAM NAME, NOT A VERB, and this distinction is the whole check. The
-/// shell implementation this framework replaced had `install.sh` and `setup.sh`: two programs split
-/// along a line nobody could name, which is how one of them came to do five unrelated things. The
+/// names `install.sh` and `setup.sh` are two programs split along a line nobody can name, which is
+/// how one of them comes to do five unrelated things. The
 /// verbs for our programs are `deploy` and `onboard`, and what is deployed or onboarded is named
 /// after itself.
 ///

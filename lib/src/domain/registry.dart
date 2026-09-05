@@ -9,7 +9,7 @@ import 'step.dart';
 /// The map from the names a program file writes to the classes that implement them.
 ///
 /// Dart compiled ahead of time has no reflection, so this is written out by hand rather than
-/// discovered. That is not a workaround. A registry that is written is a registry a check can count
+/// discovered. A registry that is written is a registry a check can count
 /// against the classes on disk **in both directions**: no step exists unregistered, and no entry
 /// points at a class that is gone.
 ///

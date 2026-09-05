@@ -265,9 +265,9 @@ RunRecord _redactedRecord(RunRecord record, Redactor redactor) {
     fqdn: record.fqdn,
     commit: record.commit,
     fingerprint: record.fingerprint,
-    // Neither carries anything a redactor could hide, and both were being dropped: a redacted
-    // record forgot which run it continued and forgot that a proof had been waived. The second is
-    // the one that mattered — a lost waiver reads as a run that was gated normally.
+    // Neither carries anything a redactor could hide, and dropping them makes a redacted record
+    // forget which run it continued and that a proof was waived. The second is the one that
+    // matters — a lost waiver reads as a run that was gated normally.
     resumes: record.resumes,
     waived: record.waived,
     end: record.end,

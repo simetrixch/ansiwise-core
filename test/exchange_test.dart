@@ -7,13 +7,13 @@ import 'support/harness.dart';
 
 /// A call whose only effect is its answer, and the postcondition the ENGINE supplies for it.
 ///
-/// **What was refused before this.** `StepExecution` fails any step whose check does not answer
+/// **What an ordinary step is judged by.** `StepExecution` fails any step whose check does not answer
 /// [Satisfied] after its apply, and that rule is the best thing this framework has: it is what turns
 /// "the step returned without throwing" into "the step worked". A call that MINTS cannot meet it.
 /// The value that comes back is the whole of what happened, so the other end holds nothing a second
 /// look could find — and asking again would not be a second look but a SECOND EXCHANGE.
 ///
-/// **What replaces it, and only for this kind.** Where the run branch asks a step's check again, an
+/// **What stands in its place, and only for this kind.** Where the run branch asks a step's check again, an
 /// [ExchangeStep] instead has the run's measurements asked whether every name THIS ROW published now
 /// holds a value. All held is a success; any missing is a failure that names it. Nothing else
 /// inherits it, and the first group below is the row that proves so.

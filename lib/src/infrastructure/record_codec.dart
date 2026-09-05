@@ -133,8 +133,7 @@ final class RecordCodec implements RecordJson {
         at: at,
         step: _step(json),
         argv: _texts(json, 'argv'),
-        // False where the key is absent, which is what a record written before this field existed
-        // showed its reader anyway. Every record this build writes carries it.
+        // False where the key is absent. Every record this build writes carries it.
         elevated: json['elevated'] == true,
         workingDirectory: _optionalText(json, 'working_directory'),
       ),

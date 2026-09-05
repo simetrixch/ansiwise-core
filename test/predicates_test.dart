@@ -139,8 +139,8 @@ void main() {
         );
 
     test('THE RECORD IS CLOSED, with an end and an exit code', () async {
-      // Measured on a machine: a record left with no end and no exit code makes everything reading
-      // records afterwards show a run still going while the process is gone.
+      // A record left with no end and no exit code makes everything reading records afterwards
+      // show a run still going while the process is gone.
       final Harness h = Harness();
       final RunRecord record = await h.runner.run(
         program: programThatCannotAsk(),

@@ -198,14 +198,12 @@ final class Runner {
 
       return closed;
     } on Object catch (thrown) {
-      // ANYTHING THE ENGINE DOES NOT OTHERWISE HANDLE, and the reason it is caught this widely is
-      // measured rather than assumed. A record that is never closed says a run is still going, for
-      // ever, to everything that reads records afterwards — and the process that would have said
-      // otherwise is gone. That is worse than any failure the exception could describe.
-      //
-      // Twice on a machine: first a condition that could not be answered, then a step whose restart
-      // never came back. Each carried a message that said exactly what had happened, and each left
-      // a record claiming the run had not finished.
+      // ANYTHING THE ENGINE DOES NOT OTHERWISE HANDLE, and it is caught this widely because of what
+      // an uncaught throw costs: a record that is never closed says a run is still going, for ever,
+      // to everything that reads records afterwards — and the process that would have said otherwise
+      // is gone. That is worse than any failure the exception could describe, and it reaches here
+      // from anywhere, a condition that cannot be answered and a step whose restart never comes back
+      // among them.
       //
       // Caught here rather than left to the caller because only this method holds the header the
       // record is closed from. What was thrown becomes the run's single issue, so nothing about it

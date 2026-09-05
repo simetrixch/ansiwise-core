@@ -28,11 +28,8 @@ import 'redactor.dart';
 /// **Why the boundary stops it instead of being passed over.** The steps run in order, so a step
 /// that ran EARLIER can hold what a later one wrote — a directory holding a file, an account owning
 /// a key, a container holding what was put in it. Undoing the earlier step therefore removes what
-/// the later one left behind, which is exactly the thing the run has just said would survive.
-/// Measured on a real installation: a run said before it started that from step 8 it could not be
-/// taken back because what that step installs leaves the data it wrote behind, and then its unwind
-/// deleted the thing that data sat inside, made four steps earlier. The record said two things that
-/// cannot both be true.
+/// the later one left behind, which is exactly the thing the run has just said would survive — and
+/// the record would then say two things that cannot both be true.
 ///
 /// **An undo that FAILS does not stop the rest, and that is a different question.** The boundary is
 /// a fact known before the run and told to the operator; a failed undo is discovered while cleaning
@@ -87,13 +84,9 @@ final class Unwind {
       // an observing step and it applies whenever the thing it waits for is not true yet
       // (step.dart:144-148), so a wait that had to wait reaches this list like any other applied
       // step. Stopping here would end the unwind at a step the run had just told the operator was
-      // not a boundary.
-      //
-      // Measured on a program of three rows — a step that writes, a wait that had to wait, and a
-      // failing row under `on_failure: exit`. The run announced "nothing — every step can be taken
-      // back", and then left the written file standing with the wait named as the boundary. The
-      // announcement and the unwind are one answer to one question, and this is the second half of
-      // it.
+      // not a boundary: the run announces "nothing — every step can be taken back" and the unwind
+      // then leaves the written file standing with the wait named as the boundary. The announcement
+      // and the unwind are one answer to one question, and this is the second half of it.
       if (step is ObservingStep) {
         continue;
       }

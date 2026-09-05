@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 /// Some values an installation needs are not questions anybody should be asked, because they follow
 /// from a question already answered. Asking for both invites a pair that does not match, and a
 /// selector built on the mismatch finds nothing and says nothing — which is the failure this exists
-/// to remove, measured on a real tree before it was built.
+/// to remove.
 void main() {
   ArgumentSpec text(String name) =>
       ArgumentSpec(name: name, kind: ArgumentKind.text, describes: 'the $name');

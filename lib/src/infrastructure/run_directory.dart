@@ -56,8 +56,8 @@ final class RunDirectory {
   /// its refusal to standard error and a person reads it. A run started over the REST surface is a
   /// DETACHED CHILD whose standard error is a pipe nobody reads — the launcher writes its standard
   /// input and forgets it — so the same sentence reaches nobody, and the caller is left with an
-  /// absence: "accepted but never wrote its record". Measured on a real installation, three times in
-  /// one evening, and each diagnosis had to be reconstructed by running the child by hand.
+  /// absence: "accepted but never wrote its record", which can only be diagnosed by running the
+  /// child by hand.
   String startupLog(RunId id) => p.join(root, '${id.value}.startup.log');
 
   /// Where this machine says what it has REMOVED to stay inside the records it keeps.
