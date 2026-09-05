@@ -16,12 +16,9 @@
 # ADDING A CHECK MEANS ADDING A LINE. A check file that is not declared here is reported too: an
 # undeclared check is one nobody agreed to, and it is how a suite grows a file that judges nothing.
 
-# The analyzer and the formatter really run over every package of this tree, and a package that
-# answered from nowhere is not counted as clean.
-analysis: test/checks/analysis_check_test.dart
-# The analyzer and the formatter find nothing to change in THIS package tree. The entry above
-# proves the gate starts them correctly; this one is the answer they give about this tree, asked
-# from the suite so a plain dart test says it too.
+# The analyzer and the formatter find nothing to change in this package tree. That they are
+# STARTED correctly is not asked here: the gate is package:ansiwise_checks_gate now, and its own
+# suite is what judges one planted tree twice, with the flags and without.
 tree-analysis: test/checks/analysis_test.dart
 # This framework names no platform, anywhere, with no exempt path — the line that keeps a plugin's
 # knowledge out of the thing that composes plugins.
@@ -37,18 +34,10 @@ exec-confinement: test/checks/exec_confinement_test.dart
 # The framework reaches no package that is not on pub.dev, so nothing of ours can become part of it
 # by the back door.
 framework-independence: test/checks/framework_independence_test.dart
-# What a gate does to a tree before it judges it: find the packages in it.
-gate-tree: test/checks/gate_tree_test.dart
 # No import points outward, so a layer cannot quietly depend on the one above it.
 layering: test/checks/layering_test.dart
 # The abolished words appear in no name.
 naming: test/checks/naming_test.dart
-# The gate files that judge nothing are one text in every repository that has a gate.
-shared-gate: test/checks/shared_gate_test.dart
-# The sequence a package gate runs, and what it does when a step of it fails.
-package-gate: test/checks/package_gate_test.dart
-# The version guard, driven with scripted versions.
-version-guard: test/checks/version_guard_test.dart
 # THERE IS NO RELEASE CHECK, BECAUSE THERE IS NO RELEASE. This package is a part of ansiwise-cli
 # and is released by nobody: there is no tag to compose, no channel to admit a stage, and no
 # release page to mark. Releasing happens once, in the product's own release/release.sh.

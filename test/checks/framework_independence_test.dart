@@ -142,15 +142,21 @@ void main() {
       );
     });
 
-    test('the held edge carries its reason and names where it is held', () {
+    test('every held edge carries its reason and names where it is held', () {
       // A bare name in a list is a claim with nothing behind it. What makes this pair work is that
-      // a reader arriving here is told which check, in which package, over which file.
-      expect(heldElsewhere.keys, <String>['ansiwise_checks_tree']);
-      expect(
-        heldElsewhere['ansiwise_checks_tree'],
-        allOf(contains('hosted-only'), contains('ansiwise-checks'), contains('DEV dependency')),
-        reason: 'the reason has to say what holds it and where, or the other half cannot be found',
-      );
+      // a reader arriving here is told which check, in which package, over which file. The names
+      // are listed as well as looped over, because WHICH edges are excused is the thing a reviewer
+      // has to see change.
+      expect(heldElsewhere.keys, <String>['ansiwise_checks_gate', 'ansiwise_checks_tree']);
+      for (final MapEntry<String, String> held in heldElsewhere.entries) {
+        expect(
+          held.value,
+          allOf(contains('hosted-only'), contains('ansiwise-checks'), contains('DEV dependency')),
+          reason:
+              'the reason for ${held.key} has to say what holds it and where, or the other half '
+              'cannot be found',
+        );
+      }
     });
 
     test('a dev dependency counts, because it is the same coupling in a different hat', () {

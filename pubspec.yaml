@@ -34,5 +34,15 @@ dev_dependencies:
   ansiwise_checks_tree:
     git:
       url: https://github.com/simetrixch/ansiwise-checks.git
-      ref: b33a49373c47f98d00959b02b9ffe36ab780705a
+      ref: aae0f297125ba18e16349fccbbd7c311ebb6306f
       path: tree
+  # THE GATE ITSELF, which this repository ran out of eleven files under tool/gate/ until they had
+  # drifted from ansiwise-cli's copy of the same eleven. A DEV dependency for the same reason as the
+  # half above, and named at the SAME ref: the two are paths into one repository, and pub resolves
+  # one package from one git description — two refs here would put two checkouts of ansiwise-checks
+  # in one resolution and be refused before a file is read.
+  ansiwise_checks_gate:
+    git:
+      url: https://github.com/simetrixch/ansiwise-checks.git
+      ref: aae0f297125ba18e16349fccbbd7c311ebb6306f
+      path: gate

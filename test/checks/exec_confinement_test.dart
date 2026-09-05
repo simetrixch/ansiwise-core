@@ -69,7 +69,7 @@ void main() {
       'bin/planted.dart': _reach,
       // The gate's own programs start the Dart toolchain, which is the whole of what they are. A
       // rule that forbade them the reach would forbid the gate.
-      'tool/gate/planted_engine.dart': _reach,
+      'tool/planted_engine.dart': _reach,
       'lib/src/domain/only_says_it.dart': _mentionsItInAComment,
     });
     final List<String> reported = directReachesIn(planted);
@@ -91,7 +91,7 @@ void main() {
       'lib/src/infrastructure/real_shell.dart',
       'test/executions/reads_a_program.dart',
       'bin/planted.dart',
-      'tool/gate/planted_engine.dart',
+      'tool/planted_engine.dart',
     ]) {
       test('the same lines in $path are not reported', () {
         expect(

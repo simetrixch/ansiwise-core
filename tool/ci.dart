@@ -6,28 +6,23 @@
 ///
 /// It has to end with `ci: OK — every check green`.
 ///
-/// THE FIRST THING IT DOES IS REFUSE THE WRONG TOOLCHAIN. tool/gate/pins.dart names the one Dart
-/// version the checks are true against, and every tool this gate starts is this process's own SDK —
-/// the real toolchain launches `Platform.resolvedExecutable`. So the pin is enforced by reading
-/// this process's version and refusing every other, with the found and the expected version in the
+/// THE FIRST THING IT DOES IS REFUSE THE WRONG TOOLCHAIN. The pin names the one Dart version the
+/// checks are true against, and every tool this gate starts is this process's own SDK — the real
+/// toolchain launches `Platform.resolvedExecutable`. So the pin is enforced by reading this
+/// process's version and refusing every other, with the found and the expected version in the
 /// refusal.
 ///
-/// THIS FILE IMPORTS NOTHING BUT `dart:`, AND EVERYTHING UNDER tool/gate/ THAT IT REACHES DOES THE
-/// SAME. The gate is what resolves the tree — `dart pub get` is its first step — so it has to be
-/// able to start on a fresh clone where no package has been resolved, and a single `package:`
-/// import would make it unable to start until it had already run.
+/// WHAT IT IS MADE OF LIVES IN package:ansiwise_checks_gate, and this file is the composition root:
+/// it finds the repository, chooses the real toolchain, and prints the verdict. The gate was
+/// carried under tool/gate/ here and in ansiwise-cli until the two copies had drifted in five
+/// files. Nothing about the ORDER of a run needed the copy — this program is started after the
+/// package it sits in has been resolved, in every script and every workflow that starts it, and the
+/// resolution the gate itself performs is the one over every package of the repository.
 library;
 
 import 'dart:io';
 
-import 'gate/dart_packages.dart';
-import 'gate/declared_checks.dart';
-import 'gate/gate_log.dart';
-import 'gate/package_gate.dart';
-import 'gate/paths.dart';
-import 'gate/pins.dart';
-import 'gate/real_dart_toolchain.dart';
-import 'gate/version_guard.dart';
+import 'package:ansiwise_checks_gate/ansiwise_checks_gate.dart';
 
 /// Runs the gate and answers non-zero when anything is wrong.
 Future<void> main(List<String> arguments) async {

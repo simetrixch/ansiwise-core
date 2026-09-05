@@ -250,6 +250,15 @@ _Declared _declaredAs(String name, Object? value) {
 /// else is measuring whether it does. A reader who wants the guarantee itself goes to the named
 /// check and reads it, exactly as they would follow a path dependency from here.
 const Map<String, String> heldElsewhere = <String, String>{
+  'ansiwise_checks_gate':
+      'the gate this repository runs, in ansiwise-checks beside the entry below and named at the '
+      'same commit. A DEV dependency, so nothing compiled reaches it, and it reaches nothing '
+      'itself: package:test and package:lints from pub.dev, and ansiwise-checks/tree for its own '
+      'suite \u2014 which pub never resolves from here, because a dev dependency of a package that is '
+      'not the root is not resolved at all. Whether that half leads back is held by the '
+      'hosted-only check named below. WHAT NOTHING HOLDS is this half\'s own manifest: hosted-only '
+      'cannot be declared by a package that reaches ansiwise-checks/tree, because the audit lives '
+      'in it. So this entry names a gap as well as a holding, and says which is which',
   'ansiwise_checks_tree':
       'a DEV dependency, so nothing compiled reaches it. Whether it leads back is held by the '
       'hosted-only check in ansiwise-checks/tree, over that package\'s own manifest: every '

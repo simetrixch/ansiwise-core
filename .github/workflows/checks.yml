@@ -38,17 +38,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # THE PIN IS READ, NOT WRITTEN OUT. tool/gate/pins.dart names the one Dart
-      # the checks of this repository are true against, and the gate refuses any
-      # other. A version restated here would be a second carrier of that fact and
-      # would drift from the one the gate enforces.
+      # THE PIN IS READ, NOT WRITTEN OUT, and it is read at the commit this
+      # repository names. package:ansiwise_checks_gate holds the one Dart
+      # version the checks of this family are true against, and the gate
+      # refuses every other SDK. Reading master instead would install one this
+      # build never resolves and make the gate refuse a run nothing asked for.
       - id: pin
         name: read the pinned Dart version
         shell: bash
         run: |
           set -euo pipefail
-          version="$(sed -n "s/^const String dartVersion = '\(.*\)';\$/\1/p" tool/gate/pins.dart)"
-          test -n "$version"
+          ref="$(awk '/^  ansiwise_checks_gate:/{found = 1} found && /^ *ref:/{print $2; exit}' pubspec.yaml)"
+          test -n "$ref" || { echo "checks: FAIL — pubspec.yaml names no ansiwise_checks_gate ref"; exit 1; }
+          version="$(curl -fsSL \
+            "https://raw.githubusercontent.com/simetrixch/ansiwise-checks/$ref/gate/lib/src/pins.dart" \
+            | sed -n "s/^const String dartVersion = '\(.*\)';\$/\1/p")"
+          test -n "$version" || { echo "checks: FAIL — no Dart pin could be read"; exit 1; }
           echo "dart=$version" >> "$GITHUB_OUTPUT"
 
       - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
