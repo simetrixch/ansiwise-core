@@ -15,7 +15,7 @@
 # push, so a part is found red where it was written rather than at the moment
 # somebody wanted to release the product.
 #
-# THE SAME THING RUNS LOCALLY. build.sh and build.ps1 in the root of this
+# THE SAME THING RUNS LOCALLY. build.sh in the root of this
 # repository do what the job below does, in the same order — for the times when
 # waiting for a runner is the wrong shape of work.
 name: checks

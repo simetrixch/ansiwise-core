@@ -1,54 +1,45 @@
-<#
-.SYNOPSIS
-  check.ps1 — every check of this repository, run here, in one command.
-  Bash twin: check.sh beside this file. The two are held to answering identically.
+#!/usr/bin/env pwsh
+# NOT AN IMPLEMENTATION. What this repository checks is written once, in the bash file of the same
+# name beside this one, and this is the Windows entry point that starts it. There is no second
+# spelling of the checks left to drift from the first.
+#
+# THE FILE IT RUNS IS ITS OWN NAME with .sh instead of .ps1, so check.ps1 runs check.sh and
+# build.ps1 runs build.sh. The name IS the rule, which is why this file is byte for byte the same
+# in every repository of the organisation and why nothing here has to be edited per repository.
+#
+# BASH IS THE ONE GIT SHIPS, FOUND BESIDE git ITSELF. Every one of these repositories is a git
+# checkout, so that bash is on the machine by definition, and it is also the one git runs a hook
+# with. The name on the path is the fallback, and it is second on purpose: on a machine with the
+# Linux subsystem installed, `bash` alone is a launcher that cannot read this tree at all.
+$ErrorActionPreference = 'Continue'
 
-.DESCRIPTION
-  WHO RUNS IT. A person on Windows runs it while working, to get the same answer without pushing.
-  The push hook (.githooks/pre-push) is bash and runs check.sh, because a git hook is started as a
-  shell script on every platform.
+# The verdict line the bash twin prints carries an em dash. Left on the machine's own code page,
+# the console draws something else, and the one line a reader looks at then differs between the
+# two ways of starting the same checks.
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
-  THE STEPS ARE NAMED. The run stops at the first red step. Its last line is then
-  `check: FAIL — <step>`, where <step> is the command that was red. A run where every step is
-  green ends with `check: OK — every check green`.
+$name = [System.IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
 
-  A MISSING TOOL IS A RED STEP, NEVER A SKIPPED ONE. A skipped step prints nothing, and a run that
-  prints nothing about a check reads like a run in which that check passed.
-
-  THE DART VERSION IS NOT READ HERE. tool/gate/pins.dart names the one Dart SDK the checks of this
-  repository are true against, and tool/ci.dart refuses every other one, printing the version it
-  found and the version it expected. Reading that pin here as well would make this file a second
-  carrier of it, and a second carrier drifts.
-#>
-$ErrorActionPreference = 'Stop'
-
-# The exit code of dart is read below, by hand, so that a red step ends with the verdict line this
-# file promises. Left at $true, PowerShell turns a non-zero exit code into a terminating error and
-# the verdict line is never reached.
-$PSNativeCommandUseErrorActionPreference = $false
-
-# The verdict lines carry an em dash, and both twins have to print it as the same characters.
-try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) } catch { }
-
-Set-Location (Split-Path -Parent $PSScriptRoot)
-
-function Stop-Check {
-  param([Parameter(Mandatory)] [string] $Step)
-  Write-Host "check: FAIL — $Step"
+$bash = $null
+$git = Get-Command git -ErrorAction SilentlyContinue
+if ($git) {
+  $shipped = Join-Path (Split-Path -Parent (Split-Path -Parent $git.Source)) 'bin/bash.exe'
+  if (Test-Path -LiteralPath $shipped) { $bash = $shipped }
+}
+if (-not $bash) { $bash = (Get-Command bash -ErrorAction SilentlyContinue).Source }
+if (-not $bash) {
+  Write-Host "${name}: FAIL — no bash on this machine, and the checks are written in it. Git ships one; install git, or put a bash on PATH. Nothing was checked."
   exit 1
 }
 
-if (-not (Get-Command dart -ErrorAction SilentlyContinue)) {
-  Write-Host 'dart is not on PATH. Every check of this repository is a Dart program, so none of them can start.'
-  Stop-Check 'dart pub get'
+# A RED RUN STILL CARRIES THE VERDICT LINE THIS ENTRY POINT PROMISES. Handed a path that is not
+# there, bash writes its own "No such file or directory" and exits 127, and a person reading for
+# `check: FAIL — <step>` finds nothing at all.
+$sh = Join-Path $PSScriptRoot "$name.sh"
+if (-not (Test-Path -LiteralPath $sh)) {
+  Write-Host "${name}: FAIL — $sh is missing, and it is where these checks are written. Nothing was checked."
+  exit 1
 }
 
-Write-Host 'check: dart pub get'
-dart pub get
-if ($LASTEXITCODE -ne 0) { Stop-Check 'dart pub get' }
-
-Write-Host 'check: dart run tool/ci.dart'
-dart run tool/ci.dart
-if ($LASTEXITCODE -ne 0) { Stop-Check 'dart run tool/ci.dart' }
-
-Write-Host 'check: OK — every check green'
+& $bash $sh @args
+exit $LASTEXITCODE
