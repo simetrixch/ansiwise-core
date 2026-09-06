@@ -12,7 +12,9 @@ import '../model/names.dart';
 /// This is where the safety a compiler cannot give across a configuration boundary is restored. A
 /// program file hands a step some values, and nothing about that is checked when the code is
 /// compiled. It is checked here instead, before the first thing is looked at: every step name,
-/// every predicate name, every argument key, every argument kind, and every required argument.
+/// every predicate name, every argument key, every argument kind, every required argument, and
+/// every answer name — wherever one appears, which is on a step, in an argument, in one entry of a
+/// mapping, and in what a condition of the installation was pointed at.
 ///
 /// A program that does not resolve is refused whole. Not the first bad entry — all of them, in one
 /// message, because an operator fixing a program file one refusal per run is an operator running it
@@ -137,6 +139,28 @@ final class ProgramResolver {
             'cannot tell — give it a name of its own in the configuration and write that name here',
           );
           continue;
+        }
+        // WHAT A BOUND CONDITION READS IS ASKED HERE, and nowhere before this can ask it. The
+        // installation's configuration points a generic condition at answers BY NAME, the program
+        // declares its answers, and neither file has seen the other: the binding holds no program
+        // and the loader holds no registry. Unchecked, the row resolves, the plan is drawn and
+        // every check reports green, and the condition refuses instead — at the start of the
+        // program it gates, which in an installation of several programs is after the ones before
+        // it have already changed the machine.
+        //
+        // Read off the KIND and never off a list of condition names: which of a condition's values
+        // are answer names is what its own declaration says, so one registered tomorrow is covered
+        // without a line here being edited.
+        for (final ArgumentSpec spec in predicate.arguments) {
+          if (spec.kind != ArgumentKind.answerName || !predicate.bound.has(spec.name)) {
+            continue;
+          }
+          final String answer = predicate.bound.text(spec.name);
+          if (program.answers.named(answer) == null) {
+            problems.add(
+              '$where: "$name" reads the answer "$answer", and this program does not declare it',
+            );
+          }
         }
         if (_wrongSide(registered, predicate) case final String refusal) {
           problems.add('$where: $refusal');

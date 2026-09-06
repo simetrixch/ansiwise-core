@@ -386,6 +386,95 @@ void main() {
 
     expect(resolved.steps, hasLength(1));
   });
+
+  group('a row gated on a condition the installation pointed at answers', () {
+    // The registry as a binary holds it: a plugin's generic condition, and the use of it an
+    // installation's configuration named and told which two answers to compare. Built through
+    // bindConditions rather than written out, because what a bound condition remembers of its
+    // declaration is exactly what is under probe here.
+    final Registry bound = bindConditions(
+      registry: _comparesTwoAnswers,
+      named: <String, ConditionBinding>{
+        'built_here': const ConditionBinding(
+          predicate: 'two_answers_agree',
+          values: <String, Object>{'answer': 'build_plane', 'other_answer': 'fqdn'},
+        ),
+        'reads_a_file': const ConditionBinding(
+          predicate: 'key_is_true',
+          values: <String, Object>{'key': 'build_plane'},
+        ),
+      },
+      where: 'installation.yaml',
+    );
+
+    Program gatedOn(List<String> when, {DeclaredAnswers answers = DeclaredAnswers.none}) =>
+        programOf('p', <(String, OnFailure, List<String>)>[
+          ('needs_no_argument', OnFailure.exit, when),
+        ], answers: answers);
+
+    test('is refused, naming the program, the row, the condition and the answer', () {
+      // THE PLANTED DEFECT, and it is the shape a machine met: the program declares one of the two
+      // answers the condition compares and not the other. The row resolves today, the plan is
+      // drawn, and the run stops before its first step with the name of the answer alone.
+      expect(
+        () => ProgramResolver(bound).resolve(
+          gatedOn(
+            <String>['built_here'],
+            answers: const DeclaredAnswers(<ArgumentSpec>[
+              ArgumentSpec(name: 'fqdn', kind: ArgumentKind.text, describes: 'the domain'),
+            ]),
+          ),
+        ),
+        throwsA(
+          isA<ProgramInvalid>().having(
+            (ProgramInvalid failure) => failure.message,
+            'message',
+            allOf(
+              contains('p[0] needs_no_argument'),
+              contains('"built_here" reads the answer "build_plane"'),
+              contains('does not declare it'),
+              isNot(contains('"fqdn"')),
+            ),
+          ),
+        ),
+        reason: 'the answer that IS declared must not be named, or the reader fixes the wrong one',
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: the same row resolves once both answers are declared', () {
+      // Without this the refusal above would mean nothing: a resolver that refused every gated row
+      // would pass that test and make `when:` unusable.
+      expect(
+        ProgramResolver(bound)
+            .resolve(
+              gatedOn(
+                <String>['built_here'],
+                answers: const DeclaredAnswers(<ArgumentSpec>[
+                  ArgumentSpec(name: 'fqdn', kind: ArgumentKind.text, describes: 'the domain'),
+                  ArgumentSpec(
+                    name: 'build_plane',
+                    kind: ArgumentKind.text,
+                    describes: 'which machine builds',
+                  ),
+                ]),
+              ),
+            )
+            .steps,
+        hasLength(1),
+      );
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a condition told a KEY is not told an answer', () {
+      // What makes a value an answer name is the KIND its declaration gives it, and nothing else.
+      // Read off the value instead, every condition an installation points at a file would refuse
+      // over a key no program has any reason to declare.
+      expect(ProgramResolver(bound).resolve(gatedOn(<String>['reads_a_file'])).steps, hasLength(1));
+    });
+
+    test('THE INNOCENT NEIGHBOUR: a row with no when: is not touched', () {
+      expect(ProgramResolver(bound).resolve(gatedOn(<String>[])).steps, hasLength(1));
+    });
+  });
 }
 
 /// A registry holding one step, which reads one answer.
@@ -402,6 +491,51 @@ const Registry _readsTheDomain = Registry(
 );
 
 Step _aStep(Arguments arguments) => RunsACommand(argv: const <String>['true'], leaves: '/m');
+
+Predicate _saysSo(Arguments values) => const Says(answer: true, because: 'the probe says so');
+
+/// A registry holding one step and two GENERIC conditions, told what to look at by an installation.
+///
+/// The two differ in the one thing under probe: what the first is told are the names of ANSWERS,
+/// and what the second is told is a key of a file. Both arrive as text.
+const Registry _comparesTwoAnswers = Registry(
+  steps: <StepName, RegisteredStep>{
+    StepName('needs_no_argument'): RegisteredStep(
+      name: StepName('needs_no_argument'),
+      source: 'lib/src/steps/needs_no_argument.dart:1',
+      create: _aStep,
+    ),
+  },
+  predicates: <PredicateName, RegisteredPredicate>{
+    PredicateName('two_answers_agree'): RegisteredPredicate.taking(
+      name: PredicateName('two_answers_agree'),
+      source: 'lib/src/conditions/two_answers_agree.dart:1',
+      create: _saysSo,
+      describes: 'whether two answers of the run carry the same value',
+      arguments: <ArgumentSpec>[
+        ArgumentSpec(
+          name: 'answer',
+          kind: ArgumentKind.answerName,
+          describes: 'one of the two answers compared',
+        ),
+        ArgumentSpec(
+          name: 'other_answer',
+          kind: ArgumentKind.answerName,
+          describes: 'the other of the two answers compared',
+        ),
+      ],
+    ),
+    PredicateName('key_is_true'): RegisteredPredicate.taking(
+      name: PredicateName('key_is_true'),
+      source: 'lib/src/conditions/key_is_true.dart:1',
+      create: _saysSo,
+      describes: 'whether a key of a file is true',
+      arguments: <ArgumentSpec>[
+        ArgumentSpec(name: 'key', kind: ArgumentKind.text, describes: 'the key to read'),
+      ],
+    ),
+  },
+);
 
 /// A registry holding one step, which takes an answer name as an argument.
 const Registry _readsAnswerName = Registry(

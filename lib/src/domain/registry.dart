@@ -153,12 +153,12 @@ final class RegisteredPredicate {
     required this.source,
     required Predicate predicate,
     required this.describes,
+    required this.arguments,
     required this.bound,
     required this.generic,
     required this.opposite,
   }) : _instance = predicate,
-       _factory = null,
-       arguments = const <ArgumentSpec>[];
+       _factory = null;
 
   /// Registers a GENERIC condition, which does one thing to whatever it is told to look at.
   ///
@@ -208,7 +208,11 @@ final class RegisteredPredicate {
 
   /// What this condition has to be told, and what of it is required.
   ///
-  /// Empty for a condition that reads nothing.
+  /// Empty for a condition that reads nothing. For a BOUND one it is what its generic declared, so
+  /// it describes the values standing in [bound], and it is the only thing that says what one of
+  /// them IS. A bound value is text either way, so nothing else tells the name of an ANSWER from a
+  /// path or a key — and the resolver has to tell them apart, because a condition reading an answer
+  /// the program does not declare stops the run before its first step.
   final List<ArgumentSpec> arguments;
 
   /// What it asks about the machine, in one line, for the plan the operator reads.
@@ -231,6 +235,9 @@ final class RegisteredPredicate {
     source: source,
     predicate: _factory!(values),
     describes: describes,
+    // Carried for the same reason [bound] is: the values without the declarations that describe
+    // them are text nothing can ask a question about.
+    arguments: arguments,
     bound: values,
     // Carried, or the pairing a plugin declared would be lost at exactly the moment the condition
     // becomes something a program row can name — which is the only moment it is any use.
