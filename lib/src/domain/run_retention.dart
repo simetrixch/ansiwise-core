@@ -1,6 +1,11 @@
 import 'package:meta/meta.dart';
 
-/// How many run records one machine keeps.
+/// How many run records one machine keeps for the account that is running.
+///
+/// **PER ACCOUNT, BECAUSE A STORE IS WRITTEN BY MORE THAN ONE.** A machine that runs one program
+/// on a timer as root and the deployment programs as the operator holds two sets of records in one
+/// directory, and neither account may remove the other's. So this bounds what the running account
+/// owns; the rest is left where it is and named.
 ///
 /// **A BOUND, AND NOT A POLICY.** Every invocation of the engine writes a record directory, so the
 /// number a machine holds is the number of invocations it has ever had. A program that runs on a

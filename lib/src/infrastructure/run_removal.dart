@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../domain/clock.dart';
 import '../domain/run_retention.dart';
+import '../model/failures.dart';
 import '../model/names.dart';
 import '../model/removed_runs.dart';
 import '../model/run_record.dart';
@@ -34,12 +35,22 @@ import 'run_directory.dart';
 /// **NOTHING IS OPENED WHILE THE MACHINE IS INSIDE ITS BOUND.** The listing alone answers that, so
 /// the ordinary run reads no header at all. A run that is over the bound reads one header per record
 /// on disk, and the bound itself is what keeps that number small.
+///
+/// **THE BOUND IS OVER THE RECORDS THIS ACCOUNT OWNS, and every other record is left where it is.**
+/// One machine's store is written by every account that runs the engine on it: a program on a
+/// minutely timer runs as root while an operator runs the deployment programs as themselves, and
+/// then almost every record belongs to root. Counting all of them makes this account's own history
+/// the thing that is spent to stay inside a bound the other account keeps pushing past — measured
+/// on 2026-09-06, a store of 501 records, 499 of them root's, whose note said 1,078 records had
+/// been removed and named the machine's own first record as the oldest of them. Removing them is
+/// not possible either, and the attempt is what ends the run.
 final class RunRemoval {
   /// Holds the records under [directory] to [retention], stamping the note with [clock].
   const RunRemoval({
     required this.directory,
     required this.clock,
     this.retention = const RunRetention(),
+    this.otherAccounts = recordsOfOtherAccounts,
   });
 
   /// Where the runs are.
@@ -51,25 +62,34 @@ final class RunRemoval {
   /// How many records this machine keeps.
   final RunRetention retention;
 
+  /// What answers which of the records here another account owns, and which account that is.
+  ///
+  /// A test supplies its own. A directory owned by another account cannot be planted by an account
+  /// that is not that one, because changing an owner needs root — so the only way to drive this
+  /// rule over a mixed store is to answer the question rather than to arrange it.
+  final Future<Map<String, String>> Function(List<String> paths) otherAccounts;
+
   static const RecordCodec _codec = RecordCodec();
 
   /// Indented, because this file is read by a person with whatever is at hand.
   static const JsonEncoder _noteFormat = JsonEncoder.withIndent('  ');
 
-  /// Removes the records past the bound, and adds what it took to the note beside the runs.
+  /// Removes the records this account owns past the bound, and adds what it took to the note
+  /// beside the runs. Answers what it left where it was because another account owns it, or null
+  /// where every record here is this account's own.
   ///
-  /// What is left afterwards is the newest [RunRetention.keep] records, plus every record past them
-  /// that may not be taken. A directory whose header cannot be read is not a record, is counted as
-  /// nothing, and stays.
+  /// What is left afterwards is the newest [RunRetention.keep] of this account's records, plus
+  /// every record past them that may not be taken, plus every record of another account. A
+  /// directory whose header cannot be read is not a record, is counted as nothing, and stays.
   ///
   /// A record that is gone by the time this reaches it was removed by another run doing the same
-  /// thing, and is not counted twice. Anything else the file system refuses is thrown: a machine
-  /// that cannot delete its own records is one where this bound does not hold, and a run that
-  /// carried on would leave that unsaid.
-  Future<void> apply() async {
+  /// thing, and is not counted twice. A record this account OWNS and that the file system refuses
+  /// raises [RecordNotRemoved]: a machine that cannot remove its own records is one where this
+  /// bound does not hold, and a run that carried on would leave that unsaid.
+  Future<String?> apply() async {
     final Directory root = Directory(directory.root);
     if (!await root.exists()) {
-      return;
+      return null;
     }
 
     final List<String> names = <String>[];
@@ -79,8 +99,15 @@ final class RunRemoval {
       }
     }
     if (names.length <= retention.keep) {
-      return;
+      return null;
     }
+
+    // Asked only where the store is over the bound counting every directory in it, because inside
+    // that nothing is removed whoever owns it, and the answer would change nothing.
+    final Map<String, String> elsewhere = await otherAccounts(<String>[
+      for (final String name in names) directory.of(RunId(name)),
+    ]);
+    final String? leftAlone = elsewhere.isEmpty ? null : _leftAlone(names.length, elsewhere);
 
     final List<RunRecord> records = <RunRecord>[];
     for (final String name in names) {
@@ -91,17 +118,25 @@ final class RunRemoval {
     }
     records.sort(RunRecord.newestFirst);
 
-    // Collected from every record on disk and not only from the ones being kept. A record naming a
-    // resume target is often past the bound in the same pass, and removing the target in that pass
-    // would break the link before anything read it.
+    // Collected from every record on disk and not only from the ones being kept, and not only from
+    // this account's. A record naming a resume target is often past the bound in the same pass, and
+    // removing the target in that pass would break the link before anything read it.
     final Set<String> resumed = <String>{
       for (final RunRecord each in records)
         if (each.resumes case final RunId earlier) earlier.value,
     };
 
+    // The bound is counted here and nowhere else, over this account's own records in the same order
+    // the whole store was sorted into. Counting the rest would put this account's oldest records
+    // past a bound that another account's records filled.
+    final List<RunRecord> ours = <RunRecord>[
+      for (final RunRecord each in records)
+        if (!elsewhere.containsKey(directory.of(each.id))) each,
+    ];
+
     final List<RunId> taken = <RunId>[];
-    for (int at = retention.keep; at < records.length; at++) {
-      final RunRecord record = records[at];
+    for (int at = retention.keep; at < ours.length; at++) {
+      final RunRecord record = ours[at];
       if (!record.finished || resumed.contains(record.id.value)) {
         continue;
       }
@@ -110,7 +145,7 @@ final class RunRemoval {
       }
     }
     if (taken.isEmpty) {
-      return;
+      return leftAlone;
     }
 
     // The records were ordered newest first, so the first one taken is the newest of this pass and
@@ -125,6 +160,27 @@ final class RunRemoval {
         at: clock.now(),
       ),
     );
+    return leftAlone;
+  }
+
+  /// The two sentences a run says about the records it left where they were.
+  ///
+  /// It says HOW MANY of the [all] records here belong elsewhere and WHICH accounts own them, with
+  /// a count each, because a store that never shrinks and a store that is mostly somebody else's
+  /// look identical from the outside. Said once per invocation and not once per record: a machine
+  /// where this happens at all has hundreds of them.
+  String _leftAlone(int all, Map<String, String> elsewhere) {
+    final Map<String, int> perAccount = <String, int>{};
+    for (final String account in elsewhere.values) {
+      perAccount[account] = (perAccount[account] ?? 0) + 1;
+    }
+    final String who = <String>[
+      for (final MapEntry<String, int> each in perAccount.entries) '${each.key} (${each.value})',
+    ].join(', ');
+    return 'another account owns ${elsewhere.length} of the $all run records in ${directory.root}: '
+        '$who\n'
+        'this account does not count or remove what it does not own, so the bound of '
+        '${retention.keep} records is held over the rest';
   }
 
   /// What this machine has removed, or null where it has removed nothing.
@@ -146,13 +202,16 @@ final class RunRemoval {
   }
 
   /// Whether [id] was removed here, as opposed to being gone before this reached it.
+  ///
+  /// Throws [RecordNotRemoved] where it is still there. Every record that reaches this belongs to
+  /// the account running, so a refusal here is about this account's own record and nothing else.
   Future<bool> _remove(RunId id) async {
     final Directory home = Directory(directory.of(id));
     try {
       await home.delete(recursive: true);
-    } on FileSystemException {
+    } on FileSystemException catch (refused) {
       if (await home.exists()) {
-        rethrow;
+        throw RecordNotRemoved(path: home.path, refused: refused.toString());
       }
       return false;
     }

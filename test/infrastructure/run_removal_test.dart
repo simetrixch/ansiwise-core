@@ -173,6 +173,103 @@ void main() {
     });
   });
 
+  group('a record another account owns', () {
+    /// One pass of the bound over the store, told which of the records are somebody else's.
+    ///
+    /// ANSWERED RATHER THAN ARRANGED. A directory owned by another account cannot be created by an
+    /// account that is not that one — changing an owner needs root — so a store with records of two
+    /// accounts in it can only be driven by answering the question the removal asks.
+    Future<String?> applyWith({required int keep, Set<String> theirs = const <String>{}}) =>
+        RunRemoval(
+          directory: directory,
+          clock: clock,
+          retention: RunRetention(keep),
+          otherAccounts: (List<String> paths) async => <String, String>{
+            for (final String path in paths)
+              if (theirs.contains(p.basename(path))) path: 'root',
+          },
+        ).apply();
+
+    /// Four finished records, an hour apart, and nothing removed while they are planted.
+    Future<void> plantFour() async {
+      for (int at = 0; at < 4; at++) {
+        await invoke('run-0$at', start: noon.add(Duration(minutes: at)), keep: 1000);
+      }
+    }
+
+    test('is left where it is, and the bound is counted over this account\'s own', () async {
+      // PLANTED: the oldest of four records belongs to another account, against a bound of two.
+      // This is the shape measured on a master whose store held 501 records, 499 of them root's:
+      // counting all of them puts this account's own records past a bound another account filled.
+      await plantFour();
+
+      await applyWith(keep: 2, theirs: <String>{'run-00'});
+
+      expect(recordsOnDisk(), <String>[
+        'run-00',
+        'run-02',
+        'run-03',
+      ], reason: 'a record this account does not own is not this account\'s to remove');
+      final RemovedRuns? note = await removed();
+      expect(note?.count, 1, reason: 'the note says what THIS account removed');
+      expect(note?.oldest, const RunId('run-01'));
+      expect(note?.newest, const RunId('run-01'));
+    });
+
+    test('is named once, with how many there are and whose they are', () async {
+      await plantFour();
+
+      final String? said = await applyWith(keep: 2, theirs: <String>{'run-00', 'run-01'});
+
+      expect(
+        said,
+        allOf(
+          contains('another account owns 2 of the 4 run records in ${temp.path}'),
+          contains('root (2)'),
+          contains('the bound of 2 records is held over the rest'),
+        ),
+        reason: 'a store that never shrinks and one that is mostly somebody else\'s look alike',
+      );
+    });
+
+    test('the innocent case beside it: with nothing elsewhere, the oldest two go', () async {
+      // Without this the two tests above would pass on a removal that removes nothing at all, and
+      // on one that says the same sentence whoever owns what.
+      await plantFour();
+
+      final String? said = await applyWith(keep: 2);
+
+      expect(recordsOnDisk(), <String>['run-02', 'run-03']);
+      expect(said, isNull, reason: 'there was nothing to leave alone and nothing to say');
+    });
+
+    test('a record this account owns and cannot remove ends the run, naming it', () async {
+      // PLANTED: the oldest of three records is a directory this account owns and may not write, so
+      // the file system refuses to remove what is inside it. That is the state the machine was in
+      // when the engine died with a Dart stack and exit 255.
+      for (int at = 0; at < 3; at++) {
+        await invoke('run-0$at', start: noon.add(Duration(minutes: at)), keep: 1000);
+      }
+      final String held = directory.of(const RunId('run-00'));
+      await setPermissions(held, 320);
+      addTearDown(() => setPermissions(held, 448));
+
+      await expectLater(
+        RunRemoval(directory: directory, clock: clock, retention: const RunRetention(2)).apply(),
+        throwsA(
+          isA<RecordNotRemoved>()
+              .having((RecordNotRemoved e) => e.path, 'path', held)
+              .having(
+                (RecordNotRemoved e) => e.message,
+                'message',
+                allOf(contains(held), contains('what the file system said')),
+              ),
+        ),
+        reason: 'the refusal has to name the record, or the operator is left with a stack',
+      );
+    }, skip: Platform.isWindows ? 'Windows has no POSIX permission bits' : null);
+  });
+
   group('what a reader is left with', () {
     test('the note says how many were removed, between which two, and when', () async {
       clock.advance(const Duration(days: 1));

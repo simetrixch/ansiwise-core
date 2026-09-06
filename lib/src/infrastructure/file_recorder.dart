@@ -74,6 +74,7 @@ final class FileRecorder implements Recorder {
 
   int _next = 0;
   bool _closed = false;
+  bool _boundApplied = false;
 
   @override
   int get nextSequence => _next;
@@ -139,8 +140,19 @@ final class FileRecorder implements Recorder {
   /// unfinished, and naming the run it resumes where it continues one. Applying the bound before
   /// that would take a record while none of those three were readable.
   ///
-  /// Throws [HeaderNotReplaced] where the rename cannot be completed within [renameBudget].
-  Future<void> save(RunRecord record) async {
+  /// **ONCE PER INVOCATION, AT THE FIRST HEADER AND NOT AT BOTH.** By the closing header this run's
+  /// own record is the newest there is, so it is never past the bound, and every other record was
+  /// weighed a moment earlier; a second pass reads one header per record on disk to remove the same
+  /// nothing. Once is also what keeps the refusal below reachable from one place — before the first
+  /// step, where ending a run is still an honest thing to do.
+  ///
+  /// Answers what the bound left where it was because another account owns it, or null where there
+  /// was nothing to say. It is the caller that says it, because a record is written for a step and
+  /// this belongs to no step.
+  ///
+  /// Throws [HeaderNotReplaced] where the rename cannot be completed within [renameBudget], and
+  /// [RecordNotRemoved] where a record this account owns is past the bound and will not go.
+  Future<String?> save(RunRecord record) async {
     final String pending = _directory.pendingHeader(id);
     final File file = File(pending);
     await file.writeAsString(
@@ -149,7 +161,11 @@ final class FileRecorder implements Recorder {
     );
     await setPermissions(pending, recordFileMode);
     await _replaceHeaderWith(file);
-    await RunRemoval(directory: _directory, clock: _clock, retention: _retention).apply();
+    if (_boundApplied) {
+      return null;
+    }
+    _boundApplied = true;
+    return RunRemoval(directory: _directory, clock: _clock, retention: _retention).apply();
   }
 
   /// Puts [pending] where the header goes, retrying while the file system refuses.

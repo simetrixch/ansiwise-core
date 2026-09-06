@@ -294,6 +294,33 @@ final class HeaderNotReplaced extends EngineFailure {
   final String refused;
 }
 
+/// A run record this account owns is past the bound and will not go.
+///
+/// The number of records a machine keeps is held by removing the oldest ones past it, and a record
+/// this account owns and cannot remove is a record that will be met again on every run from now
+/// on. So the bound is not a bound, and a run that carried on would leave that unsaid.
+///
+/// **RAISED FOR THIS ACCOUNT'S OWN RECORDS AND NOTHING ELSE.** A record another account owns is not
+/// this account's to remove, is not counted against the bound, and is named rather than refused —
+/// the store of a machine that runs one program as root on a timer and another as the operator is
+/// mostly root's, and refusing there would end every run the operator starts.
+final class RecordNotRemoved extends EngineFailure {
+  /// Records that the run record at [path] stayed, because the file system said [refused].
+  RecordNotRemoved({required this.path, required this.refused})
+    : super(
+        'this account owns the run record $path and cannot remove it, so the number of records '
+        'this machine keeps is not a bound it can hold\n'
+        'what the file system said: $refused\n'
+        'give the account this runs as the right to remove that directory, or remove it by hand',
+      );
+
+  /// The record that stayed.
+  final String path;
+
+  /// What the file system said the last time it refused.
+  final String refused;
+}
+
 /// A machine role does not match the program.
 final class RoleMismatch extends EngineFailure {
   /// Records that [program] does not apply to a machine of [role].
