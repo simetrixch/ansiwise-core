@@ -17,8 +17,17 @@
 /// THE CHILD HERE IS A REAL DETACHED PROCESS. It has to be: what is under test is the argument list
 /// that reaches another process, and a fake that records a call would measure this file's own idea of
 /// the call rather than what the operating system delivers.
+///
+/// THE SECOND THING HELD is that a run which writes more than a pipe holds still finishes. A child
+/// told its answers over standard input is started with all three streams attached, and the other end
+/// of its output belongs to the process that started it. Measured on a Windows host: a child writing
+/// 400 kilobytes to standard output while nothing read it stood in its own `write` for 11908 ms,
+/// which was exactly as long as its parent lived, and then failed with a broken pipe. On a Linux host
+/// the same child stands there for as long as the parent lives, which for a resident service is for
+/// ever — with its record open at whatever event it had reached.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:ansiwise_core/ansiwise_core.dart';
@@ -114,5 +123,68 @@ void main(List<String> argv) {
     expect(handed.indexOf('--config'), lessThan(handed.indexOf('--mode')));
     expect(handed, containsAllInOrder(<String>['--config', 'ansiwise.yaml', '--mode', 'run']));
     expect(handed, containsAllInOrder(<String>['--resume', 'earlier']));
+  });
+
+  /// A child that writes far more than any pipe holds BEFORE it reads what it was told, and then
+  /// writes down what it was told.
+  ///
+  /// The order is the whole point. A run writes its header and its first lines before it has read
+  /// anything back from whoever started it, so a run that cannot write cannot get as far as reading —
+  /// and the envelope this parent already wrote and closed sits in the pipe unread.
+  ///
+  /// 400 kilobytes over both streams, which is past every pipe buffer either platform gives: 64 KiB
+  /// on Linux, and a few kilobytes on Windows where the size is left to the system.
+  File aChildThatWritesMoreThanAPipeHolds() {
+    final File script = File('${home.path}/loud_child.dart');
+    script.writeAsStringSync(r'''
+import 'dart:convert';
+import 'dart:io';
+
+Future<void> main(List<String> argv) async {
+  final String beside = File.fromUri(Platform.script).parent.path;
+  final String line = 'x' * 200;
+  for (int at = 0; at < 1000; at++) {
+    stdout.writeln('$at $line');
+    stderr.writeln('$at $line');
+  }
+  await stdout.flush();
+  await stderr.flush();
+  final String envelope = await stdin.transform(utf8.decoder).join();
+  File('$beside/heard.txt').writeAsStringSync(envelope);
+}
+''');
+    return script;
+  }
+
+  /// What the loud child heard, or the failure that it never got that far.
+  Future<String> whatItHeard() async {
+    final File written = File('${home.path}/heard.txt');
+    for (int attempt = 0; attempt < 200; attempt++) {
+      if (written.existsSync()) {
+        final String text = written.readAsStringSync();
+        if (text.isNotEmpty) return text;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    fail(
+      'the child wrote nothing in 20 seconds — it is standing in a write to a pipe nobody reads, '
+      'with everything it was told still unread behind it',
+    );
+  }
+
+  test('a run that writes more than a pipe holds still reads what it was told', () async {
+    final File child = aChildThatWritesMoreThanAPipeHolds();
+
+    await launcherWith(const <String>[]).start(
+      program: ProgramName(child.path),
+      mode: Mode.run,
+      answers: const <String, Object?>{'slave_fqdn': 'apps4.example.invalid'},
+      elevationPassword: 'not-a-real-password',
+    );
+
+    expect(jsonDecode(await whatItHeard()), <String, Object?>{
+      'answers': <String, Object?>{'slave_fqdn': 'apps4.example.invalid'},
+      'elevation_password': 'not-a-real-password',
+    });
   });
 }

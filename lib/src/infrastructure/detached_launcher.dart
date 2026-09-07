@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -116,6 +117,32 @@ final class DetachedLauncher implements RunLauncher {
       );
       await child.stdin.flush();
       await child.stdin.close();
+
+      // READ AND DISCARDED, and a run stops for ever without this. Standard input is the only one
+      // of the three this launcher wants, and the mode that gives it gives all three: the run's
+      // output and its errors are pipes whose other end is held HERE. A pipe holds 64 KiB on Linux
+      // and a few kilobytes on Windows, and a process whose write fills it stands in that write
+      // until somebody reads — so a run writing more than that, with nobody reading, never reaches
+      // its next line. What that looks like from outside is a record open at whatever event it had
+      // reached, a process alive and doing nothing, and a caller polling until its own clock runs
+      // out. Measured on this Windows host: 400 kilobytes into an unread pipe stood there 11908 ms,
+      // which was the whole life of the parent, and then failed.
+      //
+      // DISCARDED RATHER THAN KEPT, because the record already holds it. Every command, its exit
+      // code, its output where the row keeps it, every logged line and every verdict reach
+      // `events.jsonl` through the recording ports — this framework logs nowhere else. Every
+      // refusal before the first step is written beside the runs where a caller reads it back.
+      // What is left on these two streams is the few sentences a person at a terminal reads, and a
+      // second copy of them in the record directory would be a file nobody has a reason to open.
+      //
+      // WHAT THIS DOES NOT GIVE is a run whose output survives THIS process. When the reader ends,
+      // the pipe breaks, and the run's next write to it fails instead of blocking. The engine
+      // writes to those streams as it starts and as it ends and at no point in between, so a run
+      // outliving its launcher loses its closing line and keeps its record — and there is no way
+      // to do better from here: the only start mode that gives the child no output pipes at all
+      // gives it no standard input either, and standard input is what carries the password.
+      child.stdout.drain<void>().ignore();
+      child.stderr.drain<void>().ignore();
     }
     return id;
   }
