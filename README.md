@@ -97,7 +97,7 @@ That is the only CI. Nothing hosted runs these checks.
 **Noncommercial use is free** — personal study, hobby projects, research, and use by charities,
 schools, public research bodies and government institutions.
 
-**Companies need a commercial license from Simetrix GmbH.** Open an issue titled
+**Companies need a commercial license from simplidigita AI GmbH.** Open an issue titled
 `Commercial licence`.
 
 See [LICENSE.md](LICENSE.md) for the terms, and for what happens to your copyright when you open a
