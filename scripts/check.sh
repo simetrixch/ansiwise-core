@@ -15,9 +15,6 @@
 # of this repository are true against, and tool/ci.dart refuses every other one, printing the
 # version it found and the version it expected. Reading that pin here as well would make this file
 # a second carrier of it, and a second carrier drifts.
-#
-# Windows entry point: check.ps1 beside this file. It is a shim that starts THIS file, so there
-# is no second spelling of these checks that could answer differently.
 
 set -uo pipefail
 
