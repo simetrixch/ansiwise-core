@@ -12,9 +12,6 @@
 # a run you want NOW, without pushing, and with the whole output in front of you
 # rather than folded into a page. The two do the same thing in the same order, so
 # a green here means a green there.
-#
-# Windows entry point: build.ps1 in this folder. It is a shim that starts
-# THIS file, so there is no second spelling of this build to keep true.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
