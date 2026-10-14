@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# build.sh — prove this part locally, the way the ci of the master does.
+# build.sh — prove this part locally, the way .github/workflows/checks.yml does.
 # =============================================================================
 #
 # THIS REPOSITORY BUILDS NOTHING. It is a passive part of ansiwise-cli: no
