@@ -119,12 +119,15 @@ void main() {
     late Directory temp;
     // A stand-in for sudo: under FIXTURE_POLICY=password it runs $SUDO_ASKPASS the way sudo and
     // sudo-rs do and checks the answer, under nopasswd it runs the command without asking, and under
-    // refused it asks twice, as sudo does after a wrong password.
+    // refused it asks twice, as sudo does after a wrong password. While it asks, the password must
+    // stand in no file of the temporary directory or the channel's: grep skips the pipe itself.
     const String sudo = r"""#!/bin/bash
 [ "$1" = --askpass ] && [ "$2" = --reset-timestamp ] && [ "$3" = -- ] || exit 18
 shift 3
 case "$FIXTURE_POLICY" in
-  password) [ "$("$SUDO_ASKPASS" '')" = fixture-password ] || exit 19 ;;
+  password)
+    grep -r -F -q -D skip fixture-password "$TMPDIR" "${SUDO_ASKPASS%/*}" && exit 21
+    [ "$("$SUDO_ASKPASS" '')" = fixture-password ] || exit 19 ;;
   refused) "$SUDO_ASKPASS" '' >/dev/null; "$SUDO_ASKPASS" '' >/dev/null && exit 20; exit 1 ;;
 esac
 exec "$@"
