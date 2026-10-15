@@ -302,12 +302,19 @@ void main() {
       expect(redactor.hide('short-one-and-longer'), Redactor.marker);
     });
 
-    test('a value too short to hide is ignored, exactly as one given at the start is', () {
+    test('a short value registered during the run is hidden', () {
       final Redactor redactor = Redactor(const <String>[]);
 
       redactor.register('abc');
 
+      expect(redactor.hide('value=abc; innocent'), 'value=${Redactor.marker}; innocent');
+    });
+
+    test('registering an empty value leaves innocent text intact', () {
+      final Redactor redactor = Redactor(const <String>[]);
+      redactor.register('');
       expect(redactor.isEmpty, isTrue);
+      expect(redactor.hide('innocent'), 'innocent');
     });
 
     test('the redactor that hides nothing refuses to be told to hide something', () {

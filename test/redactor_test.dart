@@ -28,13 +28,18 @@ void main() {
       expect(redactor.hide('value=abcdefghijklmnop'), 'value=[redacted]');
     });
 
-    test('a value too short to be worth hiding is left alone', () {
-      final Redactor redactor = Redactor(<String>['abc']);
-      expect(
-        redactor.hide('abc appears in ordinary words like abcess'),
-        'abc appears in ordinary words like abcess',
-        reason: 'a page of markers is worse than the risk it removes',
-      );
+    test('every nonempty declared secret is hidden regardless of length', () {
+      for (int length = 1; length <= 7; length++) {
+        final String secret = 'x' * length;
+        final Redactor redactor = Redactor(<String>[secret]);
+        expect(redactor.hide('value=$secret; innocent'), 'value=${Redactor.marker}; innocent');
+      }
+    });
+
+    test('empty declarations leave innocent text intact', () {
+      final Redactor redactor = Redactor(const <String>['']);
+      expect(redactor.isEmpty, isTrue);
+      expect(redactor.hide('innocent'), 'innocent');
     });
 
     test('a header that names a credential is hidden by its name', () {

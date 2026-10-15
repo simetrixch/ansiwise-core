@@ -13,12 +13,8 @@
 /// one of those surfaces from the moment it is registered.
 final class Redactor {
   /// Creates a redactor that hides [secrets].
-  ///
-  /// Values shorter than [minimumLength] are ignored. A short secret would match ordinary text
-  /// everywhere and turn the record into a page of markers, which is a worse outcome than the risk
-  /// it removes — and a secret that short is a defect to fix rather than to hide.
-  Redactor(Iterable<String> secrets, {this.minimumLength = 8})
-    : _secrets = secrets.where((String s) => s.length >= minimumLength).toList()
+  Redactor(Iterable<String> secrets)
+    : _secrets = secrets.where((String s) => s.isNotEmpty).toList()
         ..sort((String a, String b) => b.length.compareTo(a.length));
 
   /// A redactor that hides nothing and cannot be made to hide anything.
@@ -41,9 +37,6 @@ final class Redactor {
   /// of the value is not readable from the record either.
   static const String marker = '[redacted]';
 
-  /// The shortest value that is worth hiding.
-  final int minimumLength;
-
   /// Longest first, so that a secret containing another secret is replaced whole rather than being
   /// broken into a marker and a leftover fragment.
   final List<String> _secrets;
@@ -62,12 +55,12 @@ final class Redactor {
   /// Kept in the same longest-first order the constructor builds, so a value registered now and a
   /// value given at the start are replaced by the same rule.
   ///
-  /// A value shorter than [minimumLength] is ignored, exactly as one handed to the constructor is.
+  /// Empty values are ignored, exactly as ones handed to the constructor are.
   ///
   /// [Redactor.none] refuses instead: it belongs to no run, so nothing it was told to hide would be
   /// hidden on any surface.
   void register(String value) {
-    if (value.length < minimumLength || _secrets.contains(value)) {
+    if (value.isEmpty || _secrets.contains(value)) {
       return;
     }
     final int shorter = _secrets.indexWhere((String each) => each.length < value.length);
