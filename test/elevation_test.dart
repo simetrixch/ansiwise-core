@@ -315,7 +315,7 @@ void main() {
 
       final List<String> argv = elevatedArgumentsFor(many);
       // After `env` and before the executable, which is where a variable belongs and where the
-      // sudo prefix's own `--prompt=` is not.
+      // sudo prefix's own options are not.
       final int from = argv.indexOf('env') + 1;
       expect(argv.sublist(from, argv.indexOf('a-tool')), <String>['ONE=1', 'TWO=2']);
     });
