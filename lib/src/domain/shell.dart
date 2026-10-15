@@ -13,8 +13,9 @@ import 'files.dart';
 /// nothing, no command is raised to root.
 ///
 /// **The password crosses no command line.** It is read once, through the files port, and handed to
-/// the elevating tool on its standard input. A password in an argument list stands in the process
-/// listing for every account on the machine for as long as the command runs.
+/// the elevating tool through its askpass helper and a private pipe, only when its policy asks for
+/// one. A password in an argument list stands in the process listing for every account on the
+/// machine for as long as the command runs.
 @immutable
 final class Elevation {
   /// Nothing says where the password comes from, so no command may be raised to root.
@@ -60,7 +61,7 @@ final class Elevation {
   /// The password itself, or null where this installation named none.
   ///
   /// Never recorded, never logged and never passed as an argument. The one thing that reads it
-  /// writes it to the elevating tool's standard input.
+  /// hands it to the elevating tool's askpass helper, never to the command's standard input.
   final String? password;
 
   /// Which file it was read out of, named in a refusal, or null where none was read.

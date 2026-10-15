@@ -115,20 +115,28 @@ void main() {
     expect(fake.commands.single.argv, <String>['tool']);
   });
 
-  test('elevation consumes its password line and passes only stdin to the child', () async {
-    final Directory temp = await Directory.systemTemp.createTemp('command-stdin-');
-    try {
-      final File sudo = File('${temp.path}/sudo');
-      await sudo.writeAsString(r'''#!/bin/bash
-IFS= read -r password
-[ "$password" = fixture-password ] || exit 19
-while [ "$1" != -- ]; do shift; done
-shift
+  group('elevation hands the password to sudo alone', () {
+    late Directory temp;
+    // A stand-in for sudo: under FIXTURE_POLICY=password it runs $SUDO_ASKPASS the way sudo and
+    // sudo-rs do and checks the answer, under nopasswd it runs the command without asking, and under
+    // refused it asks twice, as sudo does after a wrong password.
+    const String sudo = r"""#!/bin/bash
+[ "$1" = --askpass ] && [ "$2" = --reset-timestamp ] && [ "$3" = -- ] || exit 18
+shift 3
+case "$FIXTURE_POLICY" in
+  password) [ "$("$SUDO_ASKPASS" '')" = fixture-password ] || exit 19 ;;
+  refused) "$SUDO_ASKPASS" '' >/dev/null; "$SUDO_ASKPASS" '' >/dev/null && exit 20; exit 1 ;;
+esac
 exec "$@"
-''');
-      await Process.run('chmod', <String>['700', sudo.path]);
-      final File runner = File('${temp.path}/runner.dart');
-      await runner.writeAsString("""
+""";
+
+    setUp(() async {
+      temp = await Directory.systemTemp.createTemp('command-stdin-');
+      await Directory('${temp.path}/bin').create();
+      await Directory('${temp.path}/tmp').create();
+      await File('${temp.path}/bin/sudo').writeAsString(sudo);
+      await Process.run('chmod', <String>['700', '${temp.path}/bin/sudo']);
+      await File('${temp.path}/runner.dart').writeAsString("""
 import 'dart:io';
 import 'package:ansiwise_core/ansiwise_core.dart';
 Future<void> main() async {
@@ -138,18 +146,44 @@ Future<void> main() async {
   exitCode = result.exitCode;
 }
 """);
-      final ProcessResult result = await Process.run(
-        Platform.resolvedExecutable,
-        <String>[
-          '--packages=${Directory.current.path}/.dart_tool/package_config.json',
-          runner.path,
-        ],
-        environment: <String, String>{'PATH': '${temp.path}:${Platform.environment['PATH']}'},
-      );
+    });
+
+    tearDown(() => temp.delete(recursive: true));
+
+    Future<ProcessResult> elevate(String policy) => Process.run(
+      Platform.resolvedExecutable,
+      <String>[
+        '--packages=${Directory.current.path}/.dart_tool/package_config.json',
+        '${temp.path}/runner.dart',
+      ],
+      environment: <String, String>{
+        'PATH': '${temp.path}/bin:${Platform.environment['PATH']}',
+        'TMPDIR': '${temp.path}/tmp',
+        'FIXTURE_POLICY': policy,
+      },
+    );
+
+    test('a policy that asks gets the password; the child gets only its input', () async {
+      final ProcessResult result = await elevate('password');
       expect(result.exitCode, 0, reason: '${result.stderr}');
       expect(result.stdout, 'fixture-input');
-    } finally {
-      await temp.delete(recursive: true);
-    }
+      expect(Directory('${temp.path}/tmp').listSync(), isEmpty, reason: 'no channel is left');
+    });
+
+    test('a policy that does not ask never shows the child the password', () async {
+      // PLANTED: sudo under NOPASSWD runs the command without reading anything.
+      final ProcessResult result = await elevate('nopasswd');
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      expect(result.stdout, 'fixture-input');
+      expect(result.stdout, isNot(contains('fixture-password')));
+      expect(Directory('${temp.path}/tmp').listSync(), isEmpty, reason: 'no channel is left');
+    });
+
+    test('a second ask after a refused password fails at once instead of waiting', () async {
+      final ProcessResult result = await elevate('refused');
+      expect(result.exitCode, 1, reason: '${result.stderr}');
+      expect(result.stdout, isNot(contains('fixture-password')));
+      expect(Directory('${temp.path}/tmp').listSync(), isEmpty, reason: 'no channel is left');
+    });
   });
 }
