@@ -92,6 +92,7 @@ final class Command {
   const Command(this.executable, [this.arguments = const <String>[]])
     : workingDirectory = null,
       environment = const <String, String>{},
+      stdin = null,
       observes = false,
       elevated = false,
       secretOutput = false,
@@ -103,6 +104,7 @@ final class Command {
     this.arguments = const <String>[],
     this.workingDirectory,
     this.environment = const <String, String>{},
+    this.stdin,
     this.observes = false,
     this.elevated = false,
     this.secretOutput = false,
@@ -127,6 +129,7 @@ final class Command {
     this.arguments = const <String>[],
     this.elevated = false,
     this.secretOutput = false,
+    this.stdin,
   }) : workingDirectory = null,
        environment = const <String, String>{},
        observes = true,
@@ -157,6 +160,11 @@ final class Command {
   /// stripped a package installer's own "do not ask me anything" one command before apt would have
   /// asked.
   final Map<String, String> environment;
+
+  /// Text sent on standard input and never recorded or placed in an argument or environment.
+  ///
+  /// A command that may echo credentials must also declare [secretOutput].
+  final String? stdin;
 
   /// Whether this command only looks at the machine and changes nothing.
   ///

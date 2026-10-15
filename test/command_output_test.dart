@@ -203,6 +203,22 @@ void main() {
   });
 
   group('a command whose output must never be kept', () {
+    test('stdin is absent from records even when failure echoes it on both streams', () async {
+      const String secret = 'fixture-stdin-secret';
+      final Harness h = Harness();
+      h.shell.answer(
+        'tool',
+        const CommandResult(exitCode: 1, stdout: secret, stderr: secret, elapsed: Duration.zero),
+      );
+      await recording(h).run(const Command.detailed('tool', stdin: secret, secretOutput: true));
+      final String record = jsonEncode(<Object?>[
+        for (final RunEvent e in h.recorder.events) const RecordCodec().event(e),
+      ]);
+      expect(record, isNot(contains(secret)));
+      expect(h.shell.commands.single.stdin, secret);
+      expect(h.recorder.only<CommandStarted>().single.argv, <String>['tool']);
+    });
+
     // The shape this exists for: a command that reads a credential store whole answers with every
     // credential in it, in whatever form that store keeps them. It is not text the redactor was
     // told about, so nothing is looking for it.

@@ -90,18 +90,19 @@ final class RealShell implements Shell {
       runInShell: false,
     );
 
-    if (password != null) {
-      await _answerThePrompt(process, password);
-    }
-
     // Both streams are drained while the process is still running. A process whose output fills the
     // pipe buffer blocks on its next write until somebody reads, so collecting the output only after
     // waiting for the exit code deadlocks — and only once the output is large enough, which on a
     // deployment it eventually is.
     final Future<String> out = process.stdout.transform(_decoder).join();
     final Future<String> err = process.stderr.transform(_decoder).join();
+    // Feed concurrently: a child can fill stdout before it finishes reading a large input.
+    final Future<bool> delivered = _writeInput(process, password, command.stdin);
 
     final int exitCode = await _waitFor(process, command);
+    if (!await delivered && exitCode == 0) {
+      throw StateError('${command.argv.join(' ')} closed before standard input was delivered');
+    }
     watch.stop();
 
     return CommandResult(
@@ -112,22 +113,17 @@ final class RealShell implements Shell {
     );
   }
 
-  /// Writes [password] to the elevating tool and closes the stream.
-  ///
-  /// Closing is what makes the command underneath it see an ended standard input rather than a pipe
-  /// nobody ever writes to again, which a tool that reads standard input would wait on forever.
-  ///
-  /// A write that fails is left alone on purpose, and this is not a swallowed failure: it happens
-  /// when the tool has already exited — a wrong password, a machine where the account may not
-  /// elevate — and the exit code that follows is the answer. Reporting the broken pipe instead
-  /// would replace a failure an operator can act on with one about a stream.
-  static Future<void> _answerThePrompt(Process process, String password) async {
+  /// Sudo consumes its password line; the child receives the remaining input and EOF.
+  static Future<bool> _writeInput(Process process, String? password, String? input) async {
     try {
-      process.stdin.write('$password\n');
+      if (password != null) process.stdin.write('$password\n');
+      if (input != null) process.stdin.write(input);
       await process.stdin.flush();
       await process.stdin.close();
-    } on Object {
-      return;
+      return true;
+    } on IOException {
+      // The process's failing exit code takes precedence over a broken input pipe.
+      return false;
     }
   }
 
