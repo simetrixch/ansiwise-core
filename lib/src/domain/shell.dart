@@ -13,8 +13,9 @@ import 'files.dart';
 /// nothing, no command is raised to root.
 ///
 /// **The password crosses no command line.** It is read once, through the files port, and handed to
-/// the elevating tool on its standard input. A password in an argument list stands in the process
-/// listing for every account on the machine for as long as the command runs.
+/// the elevating tool through its askpass helper and a private pipe, only when its policy asks for
+/// one. A password in an argument list stands in the process listing for every account on the
+/// machine for as long as the command runs.
 @immutable
 final class Elevation {
   /// Nothing says where the password comes from, so no command may be raised to root.
@@ -60,7 +61,7 @@ final class Elevation {
   /// The password itself, or null where this installation named none.
   ///
   /// Never recorded, never logged and never passed as an argument. The one thing that reads it
-  /// writes it to the elevating tool's standard input.
+  /// hands it to the elevating tool's askpass helper, never to the command's standard input.
   final String? password;
 
   /// Which file it was read out of, named in a refusal, or null where none was read.
@@ -92,9 +93,10 @@ final class Command {
   const Command(this.executable, [this.arguments = const <String>[]])
     : workingDirectory = null,
       environment = const <String, String>{},
+      stdin = null,
       observes = false,
       elevated = false,
-      secretOutput = false,
+      _secretOutput = false,
       timeout = null;
 
   /// Describes a command with everything about how it runs spelled out.
@@ -103,9 +105,10 @@ final class Command {
     this.arguments = const <String>[],
     this.workingDirectory,
     this.environment = const <String, String>{},
+    this.stdin,
     this.observes = false,
     this.elevated = false,
-    this.secretOutput = false,
+    this._secretOutput = false,
     this.timeout,
   });
 
@@ -126,7 +129,8 @@ final class Command {
     this.executable, {
     this.arguments = const <String>[],
     this.elevated = false,
-    this.secretOutput = false,
+    this._secretOutput = false,
+    this.stdin,
   }) : workingDirectory = null,
        environment = const <String, String>{},
        observes = true,
@@ -157,6 +161,11 @@ final class Command {
   /// stripped a package installer's own "do not ask me anything" one command before apt would have
   /// asked.
   final Map<String, String> environment;
+
+  /// Text sent on standard input and never recorded or placed in an argument or environment.
+  ///
+  /// Its output is withheld as well, whatever the command declares: see [secretOutput].
+  final String? stdin;
 
   /// Whether this command only looks at the machine and changes nothing.
   ///
@@ -200,8 +209,15 @@ final class Command {
   /// text it has never seen, and a value nobody registered is text nothing is looking for. This
   /// says the output is a secret without anybody having to know what is in it.
   ///
-  /// The default is false, so a command nobody thought about is recorded as every other command is.
-  final bool secretOutput;
+  /// **A command given [stdin] answers with a secret, whatever it declares.** What it echoes of its
+  /// input is that input, on success or in a failure message, and nothing here can tell an echo
+  /// from an answer.
+  ///
+  /// Otherwise the default is false, so a command nobody thought about is recorded as every other
+  /// command is.
+  bool get secretOutput => _secretOutput || stdin != null;
+
+  final bool _secretOutput;
 }
 
 /// What a command did.
