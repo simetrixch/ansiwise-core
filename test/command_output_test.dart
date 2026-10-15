@@ -219,6 +219,25 @@ void main() {
       expect(h.recorder.only<CommandStarted>().single.argv, <String>['tool']);
     });
 
+    test(
+      'stdin is absent from records when the command declares nothing about its output',
+      () async {
+        const String secret = 'fixture-undeclared-stdin';
+        final Harness h = Harness();
+        h.shell.answer(
+          'tool',
+          const CommandResult(exitCode: 9, stdout: secret, stderr: secret, elapsed: Duration.zero),
+        );
+        await recording(h).run(const Command.detailed('tool', stdin: secret));
+        final String record = jsonEncode(<Object?>[
+          for (final RunEvent e in h.recorder.events) const RecordCodec().event(e),
+        ]);
+        expect(record, isNot(contains(secret)));
+        expect(const Command.observing('tool', stdin: secret).secretOutput, isTrue);
+        expect(const Command('tool').secretOutput, isFalse, reason: 'the innocent stays recorded');
+      },
+    );
+
     // The shape this exists for: a command that reads a credential store whole answers with every
     // credential in it, in whatever form that store keeps them. It is not text the redactor was
     // told about, so nothing is looking for it.

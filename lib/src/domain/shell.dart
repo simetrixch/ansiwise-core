@@ -95,7 +95,7 @@ final class Command {
       stdin = null,
       observes = false,
       elevated = false,
-      secretOutput = false,
+      _secretOutput = false,
       timeout = null;
 
   /// Describes a command with everything about how it runs spelled out.
@@ -107,7 +107,7 @@ final class Command {
     this.stdin,
     this.observes = false,
     this.elevated = false,
-    this.secretOutput = false,
+    this._secretOutput = false,
     this.timeout,
   });
 
@@ -128,7 +128,7 @@ final class Command {
     this.executable, {
     this.arguments = const <String>[],
     this.elevated = false,
-    this.secretOutput = false,
+    this._secretOutput = false,
     this.stdin,
   }) : workingDirectory = null,
        environment = const <String, String>{},
@@ -163,7 +163,7 @@ final class Command {
 
   /// Text sent on standard input and never recorded or placed in an argument or environment.
   ///
-  /// A command that may echo credentials must also declare [secretOutput].
+  /// Its output is withheld as well, whatever the command declares: see [secretOutput].
   final String? stdin;
 
   /// Whether this command only looks at the machine and changes nothing.
@@ -208,8 +208,15 @@ final class Command {
   /// text it has never seen, and a value nobody registered is text nothing is looking for. This
   /// says the output is a secret without anybody having to know what is in it.
   ///
-  /// The default is false, so a command nobody thought about is recorded as every other command is.
-  final bool secretOutput;
+  /// **A command given [stdin] answers with a secret, whatever it declares.** What it echoes of its
+  /// input is that input, on success or in a failure message, and nothing here can tell an echo
+  /// from an answer.
+  ///
+  /// Otherwise the default is false, so a command nobody thought about is recorded as every other
+  /// command is.
+  bool get secretOutput => _secretOutput || stdin != null;
+
+  final bool _secretOutput;
 }
 
 /// What a command did.
