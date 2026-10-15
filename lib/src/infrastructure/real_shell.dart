@@ -96,12 +96,18 @@ final class RealShell implements Shell {
     // deployment it eventually is.
     final Future<String> out = process.stdout.transform(_decoder).join();
     final Future<String> err = process.stderr.transform(_decoder).join();
-    // Feed concurrently: a child can fill stdout before it finishes reading a large input.
-    final Future<bool> delivered = _writeInput(process, password, command.stdin);
+    // Read at the exit and registered before anything is written: Dart destroys the input pipe in the
+    // same turn that reports the exit (handleExit in the SDK's process_patch.dart) and drops what it
+    // had not written yet without an error, so only that moment tells a delivered input from a cut one.
+    final _Delivery delivery = _Delivery();
+    final Future<bool> deliveredByExit = process.exitCode.then((_) => delivery.written);
+    // Fed concurrently: a child can fill stdout before it finishes reading a large input.
+    final Future<void> writing = _writeInput(process, password, command.stdin, delivery);
 
     final int exitCode = await _waitFor(process, command);
-    if (!await delivered && exitCode == 0) {
-      throw StateError('${command.argv.join(' ')} closed before standard input was delivered');
+    await writing;
+    if (command.stdin != null && exitCode == 0 && !await deliveredByExit) {
+      throw InputUndelivered(command.argv);
     }
     watch.stop();
 
@@ -114,16 +120,23 @@ final class RealShell implements Shell {
   }
 
   /// Sudo consumes its password line; the child receives the remaining input and EOF.
-  static Future<bool> _writeInput(Process process, String? password, String? input) async {
+  ///
+  /// [delivery] turns written once every byte is in the pipe and before it is closed, so a command
+  /// that reads to the end of its input cannot exit before that.
+  static Future<void> _writeInput(
+    Process process,
+    String? password,
+    String? input,
+    _Delivery delivery,
+  ) async {
     try {
       if (password != null) process.stdin.write('$password\n');
       if (input != null) process.stdin.write(input);
       await process.stdin.flush();
+      delivery.written = true;
       await process.stdin.close();
-      return true;
     } on IOException {
-      // The process's failing exit code takes precedence over a broken input pipe.
-      return false;
+      // A command that stopped reading: its exit code, or InputUndelivered, reports it.
     }
   }
 
@@ -148,6 +161,11 @@ final class RealShell implements Shell {
       throw TimeoutException('${command.argv.join(' ')} did not finish and was killed', timeout);
     }
   }
+}
+
+/// Whether every byte of a command's input reached its pipe.
+final class _Delivery {
+  bool written = false;
 }
 
 /// What `sudo` is given so that [command] runs as root AND sees the variables it was promised.

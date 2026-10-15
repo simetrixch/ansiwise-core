@@ -67,8 +67,39 @@ void main() {
           timeout: const Duration(seconds: 5),
         ),
       ),
-      throwsA(isA<StateError>()),
+      throwsA(isA<InputUndelivered>()),
     );
+  });
+
+  test('input a child inherits after its parent exited is delivered whole or refused', () async {
+    final Directory temp = await Directory.systemTemp.createTemp('command-stdin-');
+    try {
+      final String count = '${temp.path}/count';
+      // The started process exits at once; the child it forked reads its input 300 ms later.
+      Command reader(int bytes) => Command.detailed(
+        'python3',
+        arguments: <String>[
+          '-c',
+          'import os, sys, time\n'
+              'if os.fork() == 0:\n'
+              '    time.sleep(0.3)\n'
+              '    open(sys.argv[1], "w").write(str(len(sys.stdin.buffer.read())))\n'
+              '    os._exit(0)\n'
+              'os._exit(0)\n',
+          count,
+        ],
+        stdin: 'x' * bytes,
+        timeout: const Duration(seconds: 5),
+      );
+      // PLANTED: a million bytes exceed the pipe, and Dart cuts what the child had not read yet.
+      await expectLater(shell.run(reader(1000000)), throwsA(isA<InputUndelivered>()));
+      // Innocent: an input the pipe holds reaches the late reader whole.
+      expect((await shell.run(reader(1000))).exitCode, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(await File(count).readAsString(), '1000');
+    } finally {
+      await temp.delete(recursive: true);
+    }
   });
 
   test('dry mode refuses mutation with stdin; an observing read preserves it', () async {

@@ -191,6 +191,20 @@ final class CommandFailed extends EngineFailure {
   final int exitCode;
 }
 
+/// A command exited before all of its standard input had reached it.
+///
+/// Raised for a command that reported success, because its success then says nothing about the
+/// input it was given: a process that hands its input to a child and exits leaves that child reading
+/// a pipe the runtime has already cut.
+final class InputUndelivered extends EngineFailure {
+  /// Records that [argv] exited before its standard input was delivered.
+  InputUndelivered(List<String> argv)
+    : super(
+        '${argv.join(' ')} exited before all of its standard input reached it\n'
+        'its success is not reported: whatever went on reading that input read only part of it',
+      );
+}
+
 /// A wait reached its deadline without what it was waiting for becoming true.
 final class WaitedTooLong extends EngineFailure {
   /// Records that [waitingFor] did not become true within [deadline].
