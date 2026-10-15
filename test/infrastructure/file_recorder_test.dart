@@ -105,6 +105,25 @@ void main() {
   group('what the recorder takes out on the way in', () {
     const String secret = 's3cret-value-here';
 
+    test('a seven-character secret echo is hidden in the decoded persisted event', () async {
+      final String short = 'x' * 7;
+      final Redactor redactor = Redactor(<String>[short]);
+      final FileRecorder recorder = await FileRecorder.open(
+        id: id,
+        directory: directory,
+        clock: clock,
+        redactor: redactor,
+      );
+      RecordingLogger(
+        recorder: recorder,
+        redactor: redactor,
+        step: step,
+      ).info('value=$short; innocent');
+      await recorder.close();
+      expect((lineOf(0)['message']! as String).contains(short), isFalse);
+      expect(lineOf(0)['message'], 'value=${Redactor.marker}; innocent');
+    });
+
     test("a plan's diff is the whole content of a file, and no port has redacted it", () async {
       final FileRecorder recorder = await open(secrets: const <String>[secret]);
       recorder.record(
