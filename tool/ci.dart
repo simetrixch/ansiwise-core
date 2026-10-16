@@ -16,7 +16,7 @@
 /// it finds the repository, chooses the real toolchain, and prints the verdict. The gate was
 /// carried under tool/gate/ here and in ansiwise-cli until the two copies had drifted in five
 /// files. Nothing about the ORDER of a run needed the copy — this program is started after the
-/// package it sits in has been resolved, in every script and every workflow that starts it, and the
+/// package it sits in has been resolved, in every script and the ci that starts it, and the
 /// resolution the gate itself performs is the one over every package of the repository.
 library;
 
