@@ -9,8 +9,8 @@ import 'package:ansiwise_checks_tree/audits.dart';
 /// all.
 ///
 /// THE REASON THAT DOES APPLY IS GATE REPRODUCIBILITY. The tree standing at a release tag IS the
-/// release, and .github/workflows/release.yml runs this gate on that tree. A dev dependency at
-/// `master` means re-running the gate at a tag months later judges whatever master holds that day,
+/// release, and `release/build.sh` of ansiwise-cli runs this gate on that tree in
+/// `ansiwise-cli-publish`. A dev dependency at `master` means re-running the gate at a tag months later judges whatever master holds that day,
 /// so the tag no longer says what was measured — which is the same thing the pin one level up
 /// exists to prevent.
 void main() => auditDependencyPins();

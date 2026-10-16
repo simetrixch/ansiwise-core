@@ -90,7 +90,13 @@ reused, so a re-attach has no gap and no duplicate.
 dart run tool/ci.dart     # the gate: the pinned toolchain, the analyzer, and the whole test suite
 ```
 
-That is the only CI. Nothing hosted runs these checks.
+The ci of this repository is the master's Tekton pipeline `ansiwise-core-ci` (hostyour-cloud
+`clusters/inventories/consumer-build/templates/pipeline-ci.yaml`). It installs the Dart that
+`ci-tools.json` names and runs `scripts/check.sh` on a push of the default branch or of a branch whose
+name starts with `ci/` (the Trigger `github-ci-push`, hostyour-cloud
+`clusters/inventories/image-builder/templates/triggers/github-ci-push.yaml`). Its runs are the
+PipelineRuns `ansiwise-core-ci-*` in the namespace `ansiwise-core-build`, and it sets the commit status
+`tekton/ci`.
 
 ## License
 
