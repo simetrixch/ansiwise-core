@@ -231,8 +231,8 @@ void main() {
       //
       // WHAT REFUSES THE RENAME HERE IS A DIRECTORY STANDING WHERE THE HEADER GOES, and not a
       // second process holding the file. A held file is refused on Windows and allowed on POSIX, so
-      // a check written that way would be skipped on the machines this repository's ci
-      // runs on — and a skipped check is not a passed one. A directory is refused by both.
+      // a check written that way would be skipped on the machines this repository's checks
+      // run on — and a skipped check is not a passed one. A directory is refused by both.
 
       Directory inTheWay() => Directory(directory.header(id))..createSync(recursive: true);
 
