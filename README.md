@@ -91,7 +91,8 @@ dart run tool/ci.dart     # the gate: the pinned toolchain, the analyzer, and th
 ```
 
 `scripts/check.sh` runs on the machine before every push: the push gate of the pre-push hook runs
-it, and a red check refuses the push. No ci runs it anywhere else.
+it, and a red check refuses the push. No ci runs it on a push; the release build of
+ansiwise-cli runs it once more before it builds a binary.
 
 ## License
 
